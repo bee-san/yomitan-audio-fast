@@ -5,11 +5,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$serverExe = Join-Path $PSScriptRoot "dist\yomitan-audio-rs.exe"
+$serverExe = Join-Path $PSScriptRoot "target\release\yomitan-audio-rs.exe"
 $bundleRoot = Join-Path (Split-Path $PSScriptRoot -Parent) "bundle"
 
 if (-not (Test-Path -LiteralPath $serverExe -PathType Leaf)) {
-    throw "Release executable is missing: $serverExe"
+    throw "Release executable is missing. Run 'cargo build --release' first: $serverExe"
 }
 if (-not (Test-Path -LiteralPath (Join-Path $bundleRoot "manifest.json") -PathType Leaf)) {
     throw "Compiled bundle is missing: $bundleRoot"

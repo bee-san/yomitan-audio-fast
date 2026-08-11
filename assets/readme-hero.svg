@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="420" viewBox="0 0 1440 420" role="img" aria-labelledby="title desc">
+  <title id="title">Yomitan Audio Fast</title>
+  <desc id="desc">Drop-in Anki audio acceleration and a standalone Rust server, measured at 18.2 and 33.1 times faster than the original.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#111a2e"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0"/>
+      <stop offset="0.3" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#fb923c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="420" rx="28" fill="url(#bg)"/>
+  <path d="M0 414H1440" stroke="#26344f"/>
+
+  <g transform="translate(72 72)">
+    <rect width="248" height="248" rx="28" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+    <rect x="28" y="28" width="192" height="192" rx="20" fill="#e7eef8"/>
+    <text x="124" y="170" text-anchor="middle" fill="#111827" font-size="118" font-family="Yu Gothic UI, Noto Sans JP, sans-serif" font-weight="700">音</text>
+    <path d="M220 96H310M220 124H348M220 152H326" stroke="url(#signal)" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(390 72)" font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="0" y="26" fill="#94a3b8" font-size="18" font-weight="700" letter-spacing="4">YOMITAN-COMPATIBLE • WINDOWS • LOOPBACK ONLY</text>
+    <text x="0" y="104" fill="#f8fafc" font-size="66" font-weight="800" letter-spacing="-2">Yomitan Audio</text>
+    <text x="0" y="186" fill="#22d3ee" font-size="88" font-weight="900" letter-spacing="-4">Fast</text>
+    <text x="0" y="232" fill="#cbd5e1" font-size="23">Drop-in Anki replacement. Standalone Rust server.</text>
+  </g>
+
+  <g transform="translate(858 328)" font-family="Inter, Segoe UI, Arial, sans-serif">
+    <g>
+      <rect width="220" height="72" rx="16" fill="#101d32" stroke="#22d3ee"/>
+      <text x="20" y="34" fill="#22d3ee" font-size="30" font-weight="800">18.2×</text>
+      <text x="20" y="57" fill="#cbd5e1" font-size="15">Anki lookup + audio</text>
+    </g>
+    <g transform="translate(238 0)">
+      <rect width="220" height="72" rx="16" fill="#21180f" stroke="#fb923c"/>
+      <text x="20" y="34" fill="#fb923c" font-size="30" font-weight="800">33.1×</text>
+      <text x="20" y="57" fill="#cbd5e1" font-size="15">Rust lookup + audio</text>
+    </g>
+  </g>
+</svg>

@@ -1,30 +1,22 @@
-# Handoff status and TODO
+# Project status
 
-## Completed
+## Complete
 
-- Original installed add-on was left untouched; all development used a copied collection.
-- Desktop-only drop-in add-on implemented; Android/`android.db` paths removed from scope.
-- Existing collection folder picker added to Anki Tools.
-- Same-ID upgrades retain `user_files` and automatically attempt one background fast-pack build when a valid DB and referenced audio exist but no valid pack is active.
-- Migration validates `entries.db`, copies metadata atomically when needed, merges absolute source paths safely, never moves/deletes original audio, and shares one job gate with regeneration/manual pack work.
-- Retained-SQLite/LRU lookup, HTTP/1.1 server, direct play/candidate endpoints, mmap pack, ranges, HEAD, ETag/304, CORS, lifecycle, publication epochs, pack leases, historical versions, and integrity verification implemented.
-- Current add-on source passed 34/34 tests under Anki CPython 3.13.5 with `ResourceWarning` treated as an error.
-- Standalone Rust compiler/server implemented with sorted mmap, CHD, and preload modes; final release tests passed 4/4.
-- Architecture and correctness evidence is checked in under `benchmarks/`.
+- Desktop-only, same-ID Anki replacement with existing-collection import UI.
+- Retained SQLite connections, bounded caches, HTTP/1.1 keep-alive, direct play, fixed row-ID mmap index, immutable mmap audio pack, loose-file fallback, ranges, HEAD, ETags/304, CORS, and versioned URLs.
+- Atomic database/pack publication, generation-aware caches, overlapping pack leases, historical immutable versions, shutdown/reload serialization, and integrity verification.
+- Standalone Rust compiler/server with sorted mmap, MPH, and preload lookup modes plus packed and individual-file A/B paths.
+- Exhaustive add-on audit: 743,634 real cases, zero mismatches.
+- Packed add-on soak: 2,064 requests across 16 clients, zero errors and zero reconnects.
+- Corrected three-server live smoke: 57/57 cases per endpoint, 108 audio candidates SHA-256 checked per endpoint.
+- Higher-sample standard performance run and raw metrics published under [`benchmarks/results/`](benchmarks/results/).
+- Code-only packaging denylist excludes audio, databases, packs, bundles, executables, caches, and bytecode.
 
-## Still worth doing
+## Next useful work
 
-1. Run the fail-closed three-server smoke harness against the exact migration-enabled 5051 process and append it to `benchmarks/results/evidence-summary.md` (the accumulated component/exhaustive/soak evidence is already present).
-2. Rebuild the distributable add-on ZIP/checksum after any future source edit and audit it for forbidden `user_files`, DB, audio, pack, cache, and bytecode entries.
-3. Add CI jobs for Anki-Python unit tests, Rust format/clippy/test, and the repository payload denylist.
-4. Test the folder picker manually inside a clean Anki profile using a copied small fixture and a same-ID upgrade using preserved `user_files`.
-5. Consider `If-Range` and weak ETag semantics; Yomitan does not depend on them, so they were not release blockers.
-6. Consider a signed downloadable Rust release and a small installer only after deciding how users should obtain/build private audio bundles locally.
-
-## Local lab endpoints at handoff
-
-- Original installed add-on: `http://127.0.0.1:5050/`
-- Optimized copied add-on: `http://127.0.0.1:5051/`
-- Standalone Rust: `http://127.0.0.1:5052/`
-
-Those processes and private payloads are not part of this repository and will not persist on another machine. Recreate them from `DATA-LAYOUT.md`.
+1. Add CI for the Anki-Python suite, `cargo fmt`/Clippy/release tests, Markdown links, SVG validation, and the payload denylist.
+2. Test the folder picker and same-ID overlay in a completely clean Anki profile with a small copied fixture.
+3. Add a signed GitHub Release for the code-only add-on ZIP and, if desired, a portable Rust EXE. Private bundles/audio must still be built locally.
+4. Measure and document macOS/Linux behavior before describing the project as cross-platform.
+5. Consider `If-Range` and weak ETag semantics. Yomitan does not currently depend on them.
+6. Rerun the full standard three-server benchmark with the corrected `416` assertion if a single all-green higher-sample report is desired. The existing standard performance data and corrected final smoke are documented separately and transparently in [`benchmarks/results/FINAL.md`](benchmarks/results/FINAL.md).

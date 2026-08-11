@@ -125,4 +125,14 @@ The legacy compatibility response returns `localhost` audio URLs. Independent An
 
 ## Final migration-build three-server smoke
 
-**Pending final 5051 restart.** This section will be replaced by the fail-closed original/Anki/Rust smoke result from the exact migration-enabled packed build. It will require dedicated endpoint shapes, rich candidate fields, exact count/name/source/URL order, numeric stable URLs, SHA-256 audio parity, CORS/preflight, ETag/304, HEAD, full/open/suffix/unsatisfiable Range, ranged HEAD, direct play, and bounded warm/concurrent timing.
+The corrected final smoke (`20260811-174022`) passed every required endpoint:
+
+| Endpoint | Cases | audio candidates SHA-256 checked | Result |
+|---|---:|---:|---:|
+| Original | 57/57 | 108 | PASS |
+| Fast Anki | 57/57 | 108 | PASS |
+| Rust | 57/57 | 108 | PASS |
+
+It required dedicated endpoint shapes, complete rich candidate fields, exact candidate count/name/source/URL order, numeric stable URLs, SHA-256 audio parity, CORS/preflight, ETag/304, HEAD, full/open/suffix/unsatisfiable Range, ranged HEAD, and direct play. The standard performance run's former Rust failure was only an obsolete harness requirement that a valid `416` response have an empty body; the patched harness permits an explanatory representation while still requiring the exact status and unsatisfied `Content-Range`.
+
+The curated headline, methodology, caveat, and raw CSV links are in [`FINAL.md`](FINAL.md).
