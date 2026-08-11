@@ -1566,7 +1566,11 @@ def feature_checks(
             }
         reference_body = expected_audio.body if expected_audio else b""
         size = len(reference_body)
-        range_specs: list[tuple[str, int, bytes, str | None]] = [
+        # A 416 response may carry an explanatory representation.  Its
+        # protocol requirements here are the status and unsatisfied
+        # Content-Range; unlike a 206 payload, its body is not audio data that
+        # can be compared byte-for-byte with the reference asset.
+        range_specs: list[tuple[str, int, bytes | None, str | None]] = [
             (
                 "prefix_0_1023",
                 206,
@@ -1606,7 +1610,7 @@ def feature_checks(
             (
                 "unsatisfiable",
                 416,
-                b"",
+                None,
                 f"bytes */{size}",
             ),
         ]
@@ -1627,7 +1631,7 @@ def feature_checks(
                 ranged = session.request(audio_url, headers={"Range": header})
             item_pass = (
                 ranged.status == expected_status
-                and ranged.body == expected_bytes
+                and (expected_bytes is None or ranged.body == expected_bytes)
                 and ranged.headers.get("content-range") == expected_content_range
             )
             range_matrix.append(
@@ -1640,8 +1644,15 @@ def feature_checks(
                     "content_range": ranged.headers.get("content-range"),
                     "expected_content_range": expected_content_range,
                     "body_bytes": len(ranged.body),
-                    "expected_body_bytes": len(expected_bytes),
-                    "bytes_match_reference": ranged.body == expected_bytes,
+                    "expected_body_bytes": (
+                        len(expected_bytes) if expected_bytes is not None else None
+                    ),
+                    "body_policy": (
+                        "byte_exact" if expected_bytes is not None else "representation_allowed"
+                    ),
+                    "bytes_match_reference": (
+                        ranged.body == expected_bytes if expected_bytes is not None else None
+                    ),
                 }
             )
         checks["range"] = {

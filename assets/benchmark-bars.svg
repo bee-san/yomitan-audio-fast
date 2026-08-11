@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="650" viewBox="0 0 1440 650" role="img" aria-labelledby="title desc">
+  <title id="title">Yomitan Audio Fast benchmark comparison</title>
+  <desc id="desc">Warm keep-alive full-response p50 latency. Cached lookup falls from 5.513 milliseconds to 0.574 milliseconds in the Anki add-on and 0.248 milliseconds in Rust. Lookup plus first audio falls from 23.548 milliseconds to 1.294 and 0.712 milliseconds.</desc>
+  <rect width="1440" height="650" rx="24" fill="#0b1020"/>
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="64" y="62" fill="#f8fafc" font-size="32" font-weight="800">Warm full-response latency</text>
+    <text x="64" y="94" fill="#94a3b8" font-size="18">p50 milliseconds • lower is better • loopback HTTP/1.1 keep-alive</text>
+
+    <g transform="translate(64 132)">
+      <rect width="632" height="420" rx="18" fill="#101827" stroke="#26344f"/>
+      <text x="28" y="48" fill="#f8fafc" font-size="23" font-weight="700">Cached lookup</text>
+      <text x="28" y="75" fill="#94a3b8" font-size="15">JSON candidate response</text>
+
+      <g transform="translate(28 112)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Original</text>
+        <rect x="118" y="0" width="430" height="30" rx="7" fill="#fb7185"/>
+        <text x="560" y="22" fill="#f8fafc" font-size="17" font-weight="700">5.513 ms</text>
+      </g>
+      <g transform="translate(28 180)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Fast Anki</text>
+        <rect x="118" y="0" width="44.8" height="30" rx="7" fill="#22d3ee"/>
+        <text x="176" y="22" fill="#22d3ee" font-size="17" font-weight="800">0.574 ms • 9.6× faster</text>
+      </g>
+      <g transform="translate(28 248)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Rust</text>
+        <rect x="118" y="0" width="19.3" height="30" rx="7" fill="#fb923c"/>
+        <text x="151" y="22" fill="#fb923c" font-size="17" font-weight="800">0.248 ms • 22.2× faster</text>
+      </g>
+      <path d="M146 315H576" stroke="#26344f"/>
+      <text x="28" y="350" fill="#94a3b8" font-size="15">Throughput</text>
+      <text x="146" y="350" fill="#f8fafc" font-size="16">96 → 1,620 → 2,913 ops/s</text>
+    </g>
+
+    <g transform="translate(744 132)">
+      <rect width="632" height="420" rx="18" fill="#101827" stroke="#26344f"/>
+      <text x="28" y="48" fill="#f8fafc" font-size="23" font-weight="700">Lookup + first audio</text>
+      <text x="28" y="75" fill="#94a3b8" font-size="15">Two requests, complete audio body read</text>
+
+      <g transform="translate(28 112)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Original</text>
+        <rect x="118" y="0" width="430" height="30" rx="7" fill="#fb7185"/>
+        <text x="560" y="22" fill="#f8fafc" font-size="17" font-weight="700">23.548 ms</text>
+      </g>
+      <g transform="translate(28 180)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Fast Anki</text>
+        <rect x="118" y="0" width="23.6" height="30" rx="7" fill="#22d3ee"/>
+        <text x="156" y="22" fill="#22d3ee" font-size="17" font-weight="800">1.294 ms • 18.2× faster</text>
+      </g>
+      <g transform="translate(28 248)">
+        <text x="0" y="22" fill="#cbd5e1" font-size="17">Rust</text>
+        <rect x="118" y="0" width="13" height="30" rx="7" fill="#fb923c"/>
+        <text x="145" y="22" fill="#fb923c" font-size="17" font-weight="800">0.712 ms • 33.1× faster</text>
+      </g>
+      <path d="M146 315H576" stroke="#26344f"/>
+      <text x="28" y="350" fill="#94a3b8" font-size="15">One-request /v1/play</text>
+      <text x="205" y="350" fill="#f8fafc" font-size="16">Anki 0.659 ms • Rust 0.266 ms</text>
+    </g>
+
+    <text x="64" y="605" fill="#64748b" font-size="15">Standard real-data run: 5 trials, 590,410-row corpus. Corrected follow-up smoke: 57/57 cases passed for every endpoint.</text>
+  </g>
+</svg>

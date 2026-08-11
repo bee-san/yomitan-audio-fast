@@ -13,9 +13,8 @@ folders into:
         lookup.bin
         audio.pack
 
-The original installed Anki add-on and original audio folders are never needed
-or modified by this project. The supplied lab was compiled from
-../anki-addon-fast, which is a separate copy.
+Compilation reads an existing add-on collection but does not modify its
+database or source audio. Runtime needs only the generated bundle.
 
 ## Fast architecture
 
@@ -34,18 +33,38 @@ or modified by this project. The supplied lab was compiled from
   not allocate or copy an entire clip into a Rust Vec on the pack path.
 - /v1/play performs lookup, selection, and playback in one request.
 
-## Run the supplied release build
+## Build, compile your private bundle, and run
 
-From this directory:
+This repository ships source. It does not ship an EXE, database, audio pack,
+or private bundle.
 
-    .\dist\yomitan-audio-rs.exe serve --bundle ..\bundle --host 127.0.0.1 --port 5050
+From this directory on Windows with stable Rust/MSVC:
+
+```powershell
+cargo test --release
+cargo build --release
+
+$addonRoot = Join-Path $env:APPDATA 'Anki2\addons21\1045800357'
+.\target\release\yomitan-audio-rs.exe compile `
+  --addon-root $addonRoot `
+  --output ..\bundle `
+  --pack-workers 8
+
+.\target\release\yomitan-audio-rs.exe verify --bundle ..\bundle
+.\target\release\yomitan-audio-rs.exe serve `
+  --bundle ..\bundle `
+  --host 127.0.0.1 `
+  --port 5052 `
+  --lookup-mode sorted `
+  --asset-mode pack
+```
 
 The process prints a machine-readable READY line only after the manifest,
-index, pack bounds, checksum, and collision-safe CHD mapping have validated.
+index, pack bounds, checksum, and collision-safe lookup mapping have validated.
 
 Use this Yomitan-compatible custom audio URL:
 
-    http://127.0.0.1:5050/?term={term}&reading={reading}
+    http://127.0.0.1:5052/?term={term}&reading={reading}
 
 expression= is accepted as an alias for term=. The legacy filters are also
 supported:
@@ -60,7 +79,7 @@ The response shape is exactly:
       "audioSources": [
         {
           "name": "NHK16 ...",
-          "url": "http://127.0.0.1:5050/v/0123456789abcdef/audio/123"
+          "url": "http://127.0.0.1:5052/v/0123456789abcdef/audio/123"
         }
       ]
     }
@@ -85,9 +104,16 @@ supported.
 
 ## One-time compile
 
-Run this only against a copy of the add-on:
+Run this against an add-on collection that contains `user_files/entries.db`
+and the configured source folders:
 
-    .\dist\yomitan-audio-rs.exe compile --addon-root ..\anki-addon-fast --output ..\bundle --pack-workers 8
+```powershell
+$addonRoot = Join-Path $env:APPDATA 'Anki2\addons21\1045800357'
+.\target\release\yomitan-audio-rs.exe compile `
+  --addon-root $addonRoot `
+  --output ..\bundle `
+  --pack-workers 8
+```
 
 Publication is versioned. The large files are completed before the small
 top-level manifest switches to the new content version.
@@ -105,11 +131,11 @@ The manifest records:
 
 Validate normal startup invariants and the complete lookup hash:
 
-    .\dist\yomitan-audio-rs.exe verify --bundle ..\bundle
+    .\target\release\yomitan-audio-rs.exe verify --bundle ..\bundle
 
 Also stream and hash the multi-GiB pack:
 
-    .\dist\yomitan-audio-rs.exe verify --bundle ..\bundle --full-pack-hash
+    .\target\release\yomitan-audio-rs.exe verify --bundle ..\bundle --full-pack-hash
 
 ## Measured alternatives
 
@@ -119,7 +145,7 @@ All three native lookup candidates are selectable:
     --lookup-mode sorted
     --lookup-mode preload
 
-The real-data component benchmark selected sorted as the balanced default:
+The real-data component benchmark selected sorted as the balanced/default mode:
 3.8 microseconds median including filtering, dynamic URL construction and JSON,
 versus 4.2 for CHD. Preload reached 3.5 microseconds but added HashMap startup
 and resident memory. Retained hot SQLite measured 153.8 microseconds.
@@ -127,20 +153,20 @@ and resident memory. Retained hot SQLite measured 153.8 microseconds.
 The individual-file design remains available solely for real-data A/B
 measurement:
 
-    --asset-mode files --legacy-root ..\anki-addon-fast
+    --asset-mode files --legacy-root $addonRoot
 
 The component benchmark includes lookup, reading/source/user filtering,
 dynamic absolute URL construction, and JSON serialization:
 
-    .\dist\yomitan-audio-rs.exe benchmark --bundle ..\bundle --addon-root ..\anki-addon-fast --output ..\benchmarks\rust-component.json
+    .\target\release\yomitan-audio-rs.exe benchmark --bundle ..\bundle --addon-root $addonRoot --output ..\benchmarks\rust-component.json
 
 The HTTP benchmark measures process startup, working set/private bytes,
 sequential lookup latency, concurrency, audio latency, HEAD, range, CORS, and
 all runtime modes. First export a deterministic mixed real-data corpus, then
 run the matrix:
 
-    .\dist\yomitan-audio-rs.exe export-corpus --bundle ..\bundle --output ..\benchmarks\rust-http-corpus.json --count 2048
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\benchmark-http.ps1 -Exe .\dist\yomitan-audio-rs.exe -Bundle ..\bundle -LegacyRoot ..\anki-addon-fast -Corpus ..\benchmarks\rust-http-corpus.json -Output ..\benchmarks\rust-http-architecture.json
+    .\target\release\yomitan-audio-rs.exe export-corpus --bundle ..\bundle --output ..\benchmarks\rust-http-corpus.json --count 2048
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\benchmark-http.ps1 -Exe .\target\release\yomitan-audio-rs.exe -Bundle ..\bundle -LegacyRoot $addonRoot -Corpus ..\benchmarks\rust-http-corpus.json -Output ..\benchmarks\rust-http-architecture.json
 
 The harness sets the response cache capacity to zero when comparing lookup
 structures, so a cached JSON response cannot hide index differences.
@@ -150,8 +176,10 @@ microseconds for a mixed request and 1,907.7 microseconds for audio. Preload
 reduced mixed lookup to 919.6 microseconds but increased startup working set
 from 70.9 MiB to 99.2 MiB and median readiness from 655.0 to 1,042.9
 milliseconds. Individual-file audio measured 3,009.5 microseconds, making the
-pack path 1.58x faster end to end. The raw component and HTTP reports are in
-the sibling benchmarks directory.
+pack path 1.58x faster end to end. A separate MPH run showed a 32-worker
+throughput edge, so both modes remain available; the final live headline and
+launcher use sorted. The raw component and HTTP reports are in the sibling
+benchmarks directory.
 
 ## Security boundary
 

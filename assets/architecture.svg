@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="660" viewBox="0 0 1440 660" role="img" aria-labelledby="title desc">
+  <title id="title">How Yomitan Audio Fast removes latency</title>
+  <desc id="desc">The original server repeatedly opens connections, SQLite, and loose files. The optimized Anki add-on reuses HTTP and database connections and maps one audio pack. Rust uses a compiled memory-mapped lookup and the same packed media design.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="660" rx="24" fill="#f8fafc"/>
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="64" y="62" fill="#0f172a" font-size="32" font-weight="800">Where the latency went</text>
+    <text x="64" y="94" fill="#475569" font-size="18">Same Yomitan response contract. Less repeated work per click.</text>
+
+    <g transform="translate(64 132)">
+      <text x="0" y="32" fill="#be123c" font-size="20" font-weight="800">ORIGINAL</text>
+      <g transform="translate(150 0)">
+        <rect width="210" height="74" rx="12" fill="#fff1f2" stroke="#fda4af"/>
+        <text x="105" y="31" text-anchor="middle" fill="#881337" font-size="16" font-weight="700">HTTP/1.0</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9f1239" font-size="14">new socket each request</text>
+      </g>
+      <path d="M366 37H408" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(420 0)">
+        <rect width="210" height="74" rx="12" fill="#fff1f2" stroke="#fda4af"/>
+        <text x="105" y="31" text-anchor="middle" fill="#881337" font-size="16" font-weight="700">Open SQLite</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9f1239" font-size="14">connect + dynamic SQL</text>
+      </g>
+      <path d="M636 37H678" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(690 0)">
+        <rect width="210" height="74" rx="12" fill="#fff1f2" stroke="#fda4af"/>
+        <text x="105" y="31" text-anchor="middle" fill="#881337" font-size="16" font-weight="700">Open loose file</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9f1239" font-size="14">Windows metadata + I/O</text>
+      </g>
+      <path d="M906 37H948" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(960 0)">
+        <rect width="210" height="74" rx="12" fill="#fff1f2" stroke="#fda4af"/>
+        <text x="105" y="31" text-anchor="middle" fill="#881337" font-size="16" font-weight="700">localhost URL</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9f1239" font-size="14">possible IPv6 fallback</text>
+      </g>
+    </g>
+
+    <path d="M64 244H1376" stroke="#e2e8f0"/>
+
+    <g transform="translate(64 276)">
+      <text x="0" y="32" fill="#0e7490" font-size="20" font-weight="800">FAST ANKI</text>
+      <g transform="translate(150 0)">
+        <rect width="210" height="74" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+        <text x="105" y="31" text-anchor="middle" fill="#164e63" font-size="16" font-weight="700">HTTP/1.1 keep-alive</text>
+        <text x="105" y="53" text-anchor="middle" fill="#155e75" font-size="14">reuse the connection</text>
+      </g>
+      <path d="M366 37H408" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(420 0)">
+        <rect width="210" height="74" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+        <text x="105" y="31" text-anchor="middle" fill="#164e63" font-size="16" font-weight="700">Retained SQLite + LRU</text>
+        <text x="105" y="53" text-anchor="middle" fill="#155e75" font-size="14">indexed, read-only lookup</text>
+      </g>
+      <path d="M636 37H678" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(690 0)">
+        <rect width="210" height="74" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+        <text x="105" y="31" text-anchor="middle" fill="#164e63" font-size="16" font-weight="700">16-byte row index</text>
+        <text x="105" y="53" text-anchor="middle" fill="#155e75" font-size="14">direct offset + length</text>
+      </g>
+      <path d="M906 37H948" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(960 0)">
+        <rect width="210" height="74" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+        <text x="105" y="31" text-anchor="middle" fill="#164e63" font-size="16" font-weight="700">mmap audio.pack</text>
+        <text x="105" y="53" text-anchor="middle" fill="#155e75" font-size="14">serve only the byte range</text>
+      </g>
+    </g>
+
+    <path d="M64 388H1376" stroke="#e2e8f0"/>
+
+    <g transform="translate(64 420)">
+      <text x="0" y="32" fill="#c2410c" font-size="20" font-weight="800">RUST</text>
+      <g transform="translate(150 0)">
+        <rect width="210" height="74" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+        <text x="105" y="31" text-anchor="middle" fill="#7c2d12" font-size="16" font-weight="700">Axum + Tokio</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9a3412" font-size="14">concurrent loopback HTTP</text>
+      </g>
+      <path d="M366 37H408" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(420 0)">
+        <rect width="210" height="74" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+        <text x="105" y="31" text-anchor="middle" fill="#7c2d12" font-size="16" font-weight="700">Compiled mmap index</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9a3412" font-size="14">no runtime directory scan</text>
+      </g>
+      <path d="M636 37H678" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(690 0)">
+        <rect width="210" height="74" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+        <text x="105" y="31" text-anchor="middle" fill="#7c2d12" font-size="16" font-weight="700">Exact postings slice</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9a3412" font-size="14">filter without SQLite</text>
+      </g>
+      <path d="M906 37H948" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <g transform="translate(960 0)">
+        <rect width="210" height="74" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+        <text x="105" y="31" text-anchor="middle" fill="#7c2d12" font-size="16" font-weight="700">Bytes over mmap pack</text>
+        <text x="105" y="53" text-anchor="middle" fill="#9a3412" font-size="14">no whole-clip Vec copy</text>
+      </g>
+    </g>
+
+    <g transform="translate(64 560)">
+      <rect width="1312" height="58" rx="14" fill="#0f172a"/>
+      <text x="28" y="36" fill="#f8fafc" font-size="18" font-weight="700">Optional fast path:</text>
+      <text x="190" y="36" fill="#cbd5e1" font-size="18">/v1/play combines selection and streaming into one request.</text>
+      <text x="1020" y="36" fill="#22d3ee" font-size="18" font-weight="800">127.0.0.1, always.</text>
+    </g>
+  </g>
+</svg>
