@@ -1,0 +1,17 @@
+{
+  "servers": [
+    {
+      "name": "example-rust-on-unused-port",
+      "command": [
+        "C:\\path\\to\\local-audio-rs.exe",
+        "--port",
+        "5152"
+      ],
+      "cwd": "C:\\path\\to\\server",
+      "url": "http://127.0.0.1:5152",
+      "ready_path": "/healthz",
+      "repeats": 5,
+      "timeout_seconds": 30
+    }
+  ]
+}

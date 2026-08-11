@@ -1,0 +1,19 @@
+# Local/private audio data and generated artifacts
+**/user_files/
+**/entries.db
+**/android.db
+**/*.db-wal
+**/*.db-shm
+**/audio.pack
+**/audio.idx
+**/lookup.bin
+**/bundle/
+**/target/
+**/dist/
+**/*.exe
+**/*.dll
+**/*.log
+**/__pycache__/
+**/*.py[cod]
+**/.building-*/
+

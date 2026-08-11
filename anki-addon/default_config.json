@@ -1,0 +1,40 @@
+{
+  "server": {
+    "port": 5050,
+    "lookup_mode": "sqlite",
+    "response_cache_entries": 16384,
+    "row_cache_entries": 16384
+  },
+  "sources": [
+    {
+      "type": "nhk",
+      "id": "nhk16",
+      "path": "user_files/nhk16_files",
+      "display": "NHK16 %s"
+    },
+    {
+      "type": "ajt_jp",
+      "id": "shinmeikai8",
+      "path": "user_files/shinmeikai8_files",
+      "display": "SMK8 %s"
+    },
+    {
+      "type": "forvo",
+      "id": "forvo",
+      "path": "user_files/forvo_files",
+      "display": "Forvo (%s)"
+    },
+    {
+      "type": "jpod",
+      "id": "jpod",
+      "path": "user_files/jpod_files",
+      "display": "Jpod101"
+    },
+    {
+      "type": "jpod",
+      "id": "jpod_alternate",
+      "path": "user_files/jpod_alternate_files",
+      "display": "JPod101 Alt"
+    }
+  ]
+}

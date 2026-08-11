@@ -1,0 +1,618 @@
+{
+    "generatedUtc":  "2026-08-11T06:01:52.3658982+00:00",
+    "machine":  "benchmark-host",
+    "executable":  "rust-server/dist/yomitan-audio-rs.exe (not distributed)",
+    "executableSha256":  "75D2BD58A8719E1392A8474C000A25EC5D48E57324EE2BAB2D52277D73B39FAA",
+    "corpus":  "benchmarks/rust-http-corpus.json",
+    "corpusSha256":  "B9A032A00EA1DD169E832154F8526F327C08551265AFE44A36FB5EF7814DE803",
+    "corpusQueries":  2048,
+    "responseCacheEntries":  0,
+    "mixedRequestsPerRun":  4096,
+    "hotRequestsPerRun":  1000,
+    "concurrentRequestsPerRun":  2048,
+    "concurrency":  32,
+    "audioRequestsPerRun":  200,
+    "repeats":  3,
+    "runs":  [
+                 {
+                     "name":  "mmap-sorted_pack",
+                     "repeat":  1,
+                     "port":  51520,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  655.0181,
+                     "startupWorkingSetBytes":  74326016,
+                     "startupPrivateBytes":  5361664,
+                     "warmedWorkingSetBytes":  76443648,
+                     "warmedPrivateBytes":  8179712,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1167,
+                                         "p95Microseconds":  2696,
+                                         "p99Microseconds":  6548.3
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1135.8000000000002,
+                                       "p95Microseconds":  2317.7000000000003,
+                                       "p99Microseconds":  3408.5
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  276,
+                                         "requestsPerSecond":  7420.2898550724649
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1852.3,
+                                   "p95Microseconds":  4051.2000000000007,
+                                   "p99Microseconds":  4702.7
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-chd_pack",
+                     "repeat":  1,
+                     "port":  51521,
+                     "lookupMode":  "mph",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  529.6832,
+                     "startupWorkingSetBytes":  74338304,
+                     "startupPrivateBytes":  5369856,
+                     "warmedWorkingSetBytes":  76455936,
+                     "warmedPrivateBytes":  8200192,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1079.5000000000002,
+                                         "p95Microseconds":  2077.9,
+                                         "p99Microseconds":  3594.0000000000005
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1146.3000000000002,
+                                       "p95Microseconds":  2224.2000000000003,
+                                       "p99Microseconds":  3895.4
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  288.5521,
+                                         "requestsPerSecond":  7097.5050952670254
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1945.8000000000002,
+                                   "p95Microseconds":  3961.9,
+                                   "p99Microseconds":  5184.4000000000005
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "preload-hashmap_pack",
+                     "repeat":  1,
+                     "port":  51522,
+                     "lookupMode":  "preload",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  1042.8923,
+                     "startupWorkingSetBytes":  103976960,
+                     "startupPrivateBytes":  35565568,
+                     "warmedWorkingSetBytes":  106369024,
+                     "warmedPrivateBytes":  38809600,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1028.1,
+                                         "p95Microseconds":  2099.2000000000003,
+                                         "p99Microseconds":  4015.2999999999997
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1170.7,
+                                       "p95Microseconds":  2336.1,
+                                       "p99Microseconds":  4207.9000000000005
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  301.3985,
+                                         "requestsPerSecond":  6794.9906850896732
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1818.7,
+                                   "p95Microseconds":  3571.3,
+                                   "p99Microseconds":  4674.2
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-sorted_individual-files",
+                     "repeat":  1,
+                     "port":  51523,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "files",
+                     "startupMilliseconds":  535.75650000000007,
+                     "startupWorkingSetBytes":  74362880,
+                     "startupPrivateBytes":  5394432,
+                     "warmedWorkingSetBytes":  76566528,
+                     "warmedPrivateBytes":  8523776,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1117,
+                                         "p95Microseconds":  2769.4,
+                                         "p99Microseconds":  5306.2000000000007
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1056.1000000000001,
+                                       "p95Microseconds":  1933,
+                                       "p99Microseconds":  3557.1000000000004
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  252.7203,
+                                         "requestsPerSecond":  8103.820706132432
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  3009.5,
+                                   "p95Microseconds":  4813.2,
+                                   "p99Microseconds":  6875
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-sorted_pack",
+                     "repeat":  2,
+                     "port":  51524,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  1044.5086000000001,
+                     "startupWorkingSetBytes":  74309632,
+                     "startupPrivateBytes":  5345280,
+                     "warmedWorkingSetBytes":  76296192,
+                     "warmedPrivateBytes":  7917568,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1029.6000000000001,
+                                         "p95Microseconds":  1929,
+                                         "p99Microseconds":  3441.7
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1184.2,
+                                       "p95Microseconds":  2218.6,
+                                       "p99Microseconds":  4031.6
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  348.918,
+                                         "requestsPerSecond":  5869.5739400088269
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1907.7000000000003,
+                                   "p95Microseconds":  3602.5,
+                                   "p99Microseconds":  4274.9000000000005
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-chd_pack",
+                     "repeat":  2,
+                     "port":  51525,
+                     "lookupMode":  "mph",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  538.2548,
+                     "startupWorkingSetBytes":  74330112,
+                     "startupPrivateBytes":  5369856,
+                     "warmedWorkingSetBytes":  76165120,
+                     "warmedPrivateBytes":  7651328,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1009.9,
+                                         "p95Microseconds":  1835.2000000000003,
+                                         "p99Microseconds":  3068
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1183.8999999999999,
+                                       "p95Microseconds":  2235.3,
+                                       "p99Microseconds":  3697
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  225.936,
+                                         "requestsPerSecond":  9064.5138446285673
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1722.2000000000003,
+                                   "p95Microseconds":  3218.6000000000004,
+                                   "p99Microseconds":  5717.7000000000007
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "preload-hashmap_pack",
+                     "repeat":  2,
+                     "port":  51526,
+                     "lookupMode":  "preload",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  1044.604,
+                     "startupWorkingSetBytes":  103972864,
+                     "startupPrivateBytes":  35549184,
+                     "warmedWorkingSetBytes":  106319872,
+                     "warmedPrivateBytes":  38428672,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  919.60000000000014,
+                                         "p95Microseconds":  1767.9,
+                                         "p99Microseconds":  2779.7000000000003
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  971.8,
+                                       "p95Microseconds":  1864.3000000000002,
+                                       "p99Microseconds":  2972.2
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  269.0492,
+                                         "requestsPerSecond":  7611.9906693645626
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1734,
+                                   "p95Microseconds":  3394.4,
+                                   "p99Microseconds":  4616.3
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-sorted_individual-files",
+                     "repeat":  2,
+                     "port":  51527,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "files",
+                     "startupMilliseconds":  526.94810000000007,
+                     "startupWorkingSetBytes":  74338304,
+                     "startupPrivateBytes":  5378048,
+                     "warmedWorkingSetBytes":  76337152,
+                     "warmedPrivateBytes":  8110080,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  937.1,
+                                         "p95Microseconds":  1743.6000000000001,
+                                         "p99Microseconds":  2836.7
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1058.8999999999999,
+                                       "p95Microseconds":  1898.7,
+                                       "p99Microseconds":  3188
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  362.6424,
+                                         "requestsPerSecond":  5647.4367034853067
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  3228.2000000000003,
+                                   "p95Microseconds":  5337.2,
+                                   "p99Microseconds":  6649.8
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-sorted_pack",
+                     "repeat":  3,
+                     "port":  51528,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  529.1897,
+                     "startupWorkingSetBytes":  74366976,
+                     "startupPrivateBytes":  5394432,
+                     "warmedWorkingSetBytes":  76234752,
+                     "warmedPrivateBytes":  7790592,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1004.1,
+                                         "p95Microseconds":  2340.0000000000005,
+                                         "p99Microseconds":  3591.8
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1076.2,
+                                       "p95Microseconds":  2459.4,
+                                       "p99Microseconds":  3418.1000000000004
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  272.57300000000004,
+                                         "requestsPerSecond":  7513.5835170761593
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  2179.6000000000004,
+                                   "p95Microseconds":  4329.0000000000009,
+                                   "p99Microseconds":  6680.0000000000009
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-chd_pack",
+                     "repeat":  3,
+                     "port":  51529,
+                     "lookupMode":  "mph",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  538.45900000000006,
+                     "startupWorkingSetBytes":  74309632,
+                     "startupPrivateBytes":  5332992,
+                     "warmedWorkingSetBytes":  76197888,
+                     "warmedPrivateBytes":  7766016,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  1174.8,
+                                         "p95Microseconds":  3207.5,
+                                         "p99Microseconds":  6085.9000000000005
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  691.5,
+                                       "p95Microseconds":  1363.4,
+                                       "p99Microseconds":  2250.2
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  202.2504,
+                                         "requestsPerSecond":  10126.061555378878
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1654.7,
+                                   "p95Microseconds":  3113.3,
+                                   "p99Microseconds":  4191.8000000000011
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "preload-hashmap_pack",
+                     "repeat":  3,
+                     "port":  51530,
+                     "lookupMode":  "preload",
+                     "assetMode":  "pack",
+                     "startupMilliseconds":  535.51780000000008,
+                     "startupWorkingSetBytes":  103993344,
+                     "startupPrivateBytes":  35569664,
+                     "warmedWorkingSetBytes":  105799680,
+                     "warmedPrivateBytes":  38027264,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  770.2,
+                                         "p95Microseconds":  1418.7,
+                                         "p99Microseconds":  2246.6
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  884.1,
+                                       "p95Microseconds":  1688.6000000000001,
+                                       "p99Microseconds":  2460.9
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  232.9889,
+                                         "requestsPerSecond":  8790.1183275254753
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  1928.8000000000002,
+                                   "p95Microseconds":  3467.5000000000005,
+                                   "p99Microseconds":  4323.7000000000007
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 },
+                 {
+                     "name":  "mmap-sorted_individual-files",
+                     "repeat":  3,
+                     "port":  51531,
+                     "lookupMode":  "sorted",
+                     "assetMode":  "files",
+                     "startupMilliseconds":  528.0421,
+                     "startupWorkingSetBytes":  74371072,
+                     "startupPrivateBytes":  5406720,
+                     "warmedWorkingSetBytes":  76435456,
+                     "warmedPrivateBytes":  8126464,
+                     "mixedLookup":  {
+                                         "requests":  4096,
+                                         "responseBytes":  913660,
+                                         "medianMicroseconds":  956.1,
+                                         "p95Microseconds":  2174.6000000000004,
+                                         "p99Microseconds":  3503.6
+                                     },
+                     "hotLookup":  {
+                                       "requests":  1000,
+                                       "responseBytes":  513000,
+                                       "medianMicroseconds":  1086.3,
+                                       "p95Microseconds":  2255.1,
+                                       "p99Microseconds":  3298.3
+                                   },
+                     "concurrency":  {
+                                         "requests":  2048,
+                                         "concurrency":  32,
+                                         "totalMilliseconds":  287.43960000000004,
+                                         "requestsPerSecond":  7124.9751252089145
+                                     },
+                     "audio":  {
+                                   "requests":  200,
+                                   "totalBytes":  900600,
+                                   "medianMicroseconds":  2856.3,
+                                   "p95Microseconds":  5167.9000000000005,
+                                   "p99Microseconds":  5830.5000000000009
+                               },
+                     "protocol":  {
+                                      "headStatus":  200,
+                                      "acceptRanges":  "bytes",
+                                      "etag":  "\"70ba998db1c770c4-218163-08b43601f1b62ec6\"",
+                                      "rangeStatus":  206,
+                                      "rangeBytes":  16,
+                                      "contentRange":  "bytes 0-15/4503",
+                                      "cors":  "*"
+                                  },
+                     "stdoutLog":  null,
+                     "stderrLog":  null
+                 }
+             ]
+}

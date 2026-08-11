@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "generated_date": "2026-08-11",
+  "original_addon_untouched": true,
+  "fixture_suite": {
+    "passed": true,
+    "tests": 34,
+    "failures": 0,
+    "errors": 0,
+    "resource_warnings_as_errors": true,
+    "elapsed_seconds": 8.524
+  },
+  "offline_differential_audit": {
+    "passed": true,
+    "total_cases": 743634,
+    "mismatches": 0,
+    "elapsed_seconds": 70.18545,
+    "term_only": {
+      "cases": 280396,
+      "rows": 590410,
+      "sha256": "9661d6d3f2144bdfb2d3c22814e072b3455effbfced3a57362a9deccd5f7494f"
+    },
+    "exact_expression_reading_non_null": {
+      "cases": 242976,
+      "rows": 540267,
+      "sha256": "7660a74487bedb87d85e7804105ca8441a13db8f5d3c957802ba37ffc2f48125"
+    },
+    "ordered_source_subsets_and_permutations": {
+      "cases": 51675,
+      "rows": 467712,
+      "sha256": "b8a517a7c2c5b43a964eecdc36b78e61f88fe8f38230a5eb844199648c02d29e"
+    },
+    "forvo_speaker_matrix": {
+      "speakers": 5,
+      "cases": 168587,
+      "rows": 470132,
+      "sha256": "fbb6e6eaeb1c4803402adb96107afe381d78b6157347434a962e3623b94319f7"
+    },
+    "database_quick_check": "ok"
+  },
+  "real_pack_publication": {
+    "upstream_version": "70ba998db1c770c4",
+    "addon_version": "bbdb8223f72ede22",
+    "rows": 590410,
+    "source_path_assets": 373911,
+    "repeated_path_references": 216499,
+    "cross_path_identical_assets": 0,
+    "pack_bytes": 1713724873,
+    "index_bytes": 9446640,
+    "hardlinked": true,
+    "verified_reimport_seconds": 12.374885900004301,
+    "wall_seconds": 13.614756,
+    "sha256": {
+      "rust_lookup": "ad32f820f695d71f5ac8e77bee58325bb401c775921d8abb485d4749a2498270",
+      "audio_pack": "ee099859f3a3e40cde9602a065b9a8091d0ab4d35864e136c481b2ee9e1dafee",
+      "addon_index": "1e2663083fcd1029a22c5078c70f589ea69d6eb99b9c98123accbb692af43327"
+    }
+  },
+  "http_soak": {
+    "passed": true,
+    "server_pid": 4176,
+    "base_url": "http://127.0.0.1:5051",
+    "workers": 16,
+    "lookups_per_worker": 100,
+    "term_pool": 512,
+    "duration_seconds": 1.4466732000000775,
+    "requests": {
+      "total": 2064,
+      "lookups": 1600,
+      "ranges": 320,
+      "heads": 80,
+      "conditional_304": 48,
+      "cors_preflights": 16,
+      "errors": 0
+    },
+    "concurrency": {
+      "peak_workers": 16,
+      "unexpected_reconnects": 0
+    },
+    "latency_ms": {
+      "lookups": {"p50": 11.16015, "p95": 23.4016, "p99": 33.1881},
+      "audio_and_protocol": {"p50": 4.19405, "p95": 7.5254, "p99": 9.6383}
+    },
+    "connection_pool": {
+      "peak_connections": 16,
+      "peak_busy": 15,
+      "connections_end": 16,
+      "idle_end": 16,
+      "active_pack_leases_end": 0
+    },
+    "process": {
+      "working_set_before": 38703104,
+      "working_set_after": 67219456,
+      "private_bytes_before": 26734592,
+      "private_bytes_after": 36835328,
+      "threads_before": 8,
+      "threads_after": 8,
+      "handles_before": 201,
+      "handles_after": 233
+    },
+    "protocol_checks": {
+      "packed_urls": true,
+      "play_sha_matches_first_candidate": true,
+      "head": true,
+      "range": true,
+      "conditional_304": true,
+      "cors_preflight": true,
+      "connections_reused": true,
+      "pool_bound_respected": true,
+      "pool_quiescent_at_end": true
+    },
+    "sample_audio": {
+      "expression": "\u79c1",
+      "reading": "\u3042\u305f\u3044",
+      "bytes": 3690,
+      "sha256": "61adcc95372a752dae8b0635442df48ab52765ad82b01f9b7572b699a66b3050",
+      "etag": "\"bbdb8223f72ede22-246076\""
+    }
+  }
+}

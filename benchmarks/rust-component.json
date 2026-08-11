@@ -1,0 +1,117 @@
+{
+  "generatedUtc": "unix:1786427470",
+  "serverVersion": "0.1.0",
+  "bundleVersion": "70ba998db1c770c4",
+  "dataset": {
+    "terms": 280396,
+    "mappingRows": 590410,
+    "logicalAudioAssets": 373911,
+    "uniqueAudioBlobs": 373911,
+    "repeatedPathReferences": 216499,
+    "identicalContentAssets": 0,
+    "distinctSpeakers": 5,
+    "sourceAudioBytes": 1713724873,
+    "packBytes": 1713724873,
+    "deduplicatedBytes": 0,
+    "compilerMilliseconds": 1032358,
+    "packBuildMilliseconds": 0,
+    "mphBuildMilliseconds": 0,
+    "lookupBuildMilliseconds": 0
+  },
+  "indexOpenMilliseconds": 322.4348,
+  "architectures": [
+    {
+      "name": "mmap-sorted-xxh3-fanout",
+      "setupMilliseconds": 0.0174,
+      "iterations": 20000,
+      "totalMilliseconds": 105.0397,
+      "medianMicroseconds": 3.8,
+      "p95Microseconds": 11.0,
+      "p99Microseconds": 21.7,
+      "operationsPerSecond": 190404.19955502538,
+      "outputChecksum": "38be26936e6110da"
+    },
+    {
+      "name": "mmap-chd-perfect-hash",
+      "setupMilliseconds": 0.00009999999999999999,
+      "iterations": 20000,
+      "totalMilliseconds": 116.11399999999999,
+      "medianMicroseconds": 4.2,
+      "p95Microseconds": 12.2,
+      "p99Microseconds": 21.7,
+      "operationsPerSecond": 172244.51831820453,
+      "outputChecksum": "38be26936e6110da"
+    },
+    {
+      "name": "preloaded-hashmap",
+      "setupMilliseconds": 137.4976,
+      "iterations": 20000,
+      "totalMilliseconds": 90.58380000000001,
+      "medianMicroseconds": 3.5,
+      "p95Microseconds": 8.8,
+      "p99Microseconds": 14.0,
+      "operationsPerSecond": 220790.0308885253,
+      "outputChecksum": "38be26936e6110da"
+    },
+    {
+      "name": "retained-sqlite-hot",
+      "setupMilliseconds": 0.761,
+      "iterations": 20000,
+      "totalMilliseconds": 5205.3355,
+      "medianMicroseconds": 153.8,
+      "p95Microseconds": 926.6,
+      "p99Microseconds": 1777.9,
+      "operationsPerSecond": 3842.2115154729217,
+      "outputChecksum": "2fd5b7414375934b"
+    }
+  ],
+  "audioStorage": [
+    {
+      "name": "mmap-pack-zero-copy-view",
+      "iterations": 2000,
+      "totalMilliseconds": 535.8597000000001,
+      "medianMicroseconds": 358.3,
+      "p95Microseconds": 563.1,
+      "operationsPerSecond": 3732.3202323294695,
+      "touchedBytes": 9086003,
+      "outputChecksum": "1605142a31369600"
+    },
+    {
+      "name": "individual-file-open-read",
+      "iterations": 2000,
+      "totalMilliseconds": 1673.5463,
+      "medianMicroseconds": 721.5,
+      "p95Microseconds": 2069.3,
+      "operationsPerSecond": 1195.0670262304664,
+      "touchedBytes": 9086003,
+      "outputChecksum": "1605142a31369600"
+    }
+  ],
+  "packCompilerPrefetch": [
+    {
+      "workers": 1,
+      "files": 10000,
+      "bytes": 45804775,
+      "totalMilliseconds": 2418.3052,
+      "filesPerSecond": 4135.127361095697,
+      "mebibytesPerSecond": 18.06340964997598,
+      "outputChecksum": "b03e771aaedb0dda"
+    },
+    {
+      "workers": 8,
+      "files": 10000,
+      "bytes": 45804775,
+      "totalMilliseconds": 391.065,
+      "filesPerSecond": 25571.19660414509,
+      "mebibytesPerSecond": 111.70224255882549,
+      "outputChecksum": "b03e771aaedb0dda"
+    }
+  ],
+  "notes": [
+    "Lookup timings include reading/source/user filtering, dynamic absolute URL construction, and JSON serialization.",
+    "Lookup component cache is bypassed so index architecture remains measurable.",
+    "Audio component timings are warm real-data operations; HTTP and concurrent results are recorded by scripts/benchmark-http.ps1.",
+    "mmap-pack-view creates the exact zero-copy Bytes owner used by HTTP; individual-files opens and reads a separate file.",
+    "Pack compiler prefetch compares the same warm sampled files with one and eight read+hash workers; full compile time is taken from the manifest."
+  ]
+}

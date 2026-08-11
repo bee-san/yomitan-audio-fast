@@ -1,0 +1,341 @@
+{
+  "schema_version": 1,
+  "measurement_scope": "Implementation component microbenchmarks on the copied 590,410-row real dataset; end-to-end HTTP results are reported separately.",
+  "python_lookup_component_operations_per_mode": 9000,
+  "variants": [
+    {
+      "runtime": "Python / legacy",
+      "index": "new SQLite connection per request",
+      "serialized_lookup_us": 2292.0,
+      "cache_hit_us": null,
+      "startup_ms": null,
+      "incremental_working_set_mb": null,
+      "decision": "baseline",
+      "notes": "Includes current-style dynamic SQL plus JSON serialization in the add-on component benchmark."
+    },
+    {
+      "runtime": "Python / optimized add-on",
+      "index": "retained immutable SQLite connections",
+      "serialized_lookup_us": 75.0,
+      "cache_hit_us": 0.8,
+      "startup_ms": 2.2,
+      "incremental_working_set_mb": 0.14,
+      "decision": "selected",
+      "notes": "Selected lookup path. It preserves SQL filter/order semantics and returns stable DB row IDs without a multi-second preload. A bounded row/response LRU serves repeat lookups."
+    },
+    {
+      "runtime": "Python experiment",
+      "index": "full in-memory HashMap",
+      "serialized_lookup_us": 34.5,
+      "cache_hit_us": 0.8,
+      "startup_ms": 5760.0,
+      "incremental_working_set_mb": 250.0,
+      "decision": "rejected",
+      "notes": "Faster uncached component lookup, but startup and memory costs are disproportionate after response caching."
+    },
+    {
+      "runtime": "Python experiment",
+      "index": "mmap open-address packed hash index",
+      "serialized_lookup_us": 72.4,
+      "cache_hit_us": 0.8,
+      "startup_ms": 2.1,
+      "incremental_working_set_mb": 0.01,
+      "decision": "not selected",
+      "notes": "Excellent startup/RSS but similar median to retained SQLite and a worse first-touch tail."
+    },
+    {
+      "runtime": "Rust / native experiment",
+      "index": "sorted mmap + xxh3 fanout/postings",
+      "serialized_lookup_us": 3.8,
+      "p95_lookup_us": 11.0,
+      "p99_lookup_us": 21.7,
+      "cache_hit_us": null,
+      "startup_ms": 0.0174,
+      "incremental_working_set_mb": null,
+      "decision": "not selected",
+      "notes": "20,000 deterministic real lookups, cache bypassed. Includes reading/source/user filtering, absolute URL construction, and JSON serialization; component setup excludes the shared 322.435 ms bundle/index validation-open step. Component p50 narrowly beat MPH, but the repeated HTTP matrix favored MPH for startup, concurrency, and packed audio."
+    },
+    {
+      "runtime": "Rust / native experiment",
+      "index": "CHD minimal perfect hash mmap + postings",
+      "serialized_lookup_us": 4.2,
+      "p95_lookup_us": 12.2,
+      "p99_lookup_us": 21.7,
+      "cache_hit_us": null,
+      "startup_ms": 0.0001,
+      "incremental_working_set_mb": null,
+      "decision": "selected native default",
+      "notes": "20,000 deterministic real lookups, cache bypassed. O(1) key-to-postings lookup; filtering/order/JSON are included. Output checksum exactly matches the sorted and preloaded modes."
+    },
+    {
+      "runtime": "Rust / native experiment",
+      "index": "preloaded HashMap + postings",
+      "serialized_lookup_us": 3.5,
+      "p95_lookup_us": 8.8,
+      "p99_lookup_us": 14.0,
+      "cache_hit_us": null,
+      "startup_ms": 137.4976,
+      "incremental_working_set_mb": null,
+      "decision": "not selected",
+      "notes": "Fastest component and mixed sequential HTTP median of the three native bundle modes, but adds preload setup and about 28.3 MiB startup working set. Its median 32-worker throughput was below MPH. Output checksum exactly matches sorted and MPH."
+    },
+    {
+      "runtime": "Rust / native experiment",
+      "index": "retained SQLite (hot)",
+      "serialized_lookup_us": 153.8,
+      "p95_lookup_us": 926.6,
+      "p99_lookup_us": 1777.9,
+      "cache_hit_us": null,
+      "startup_ms": 0.761,
+      "incremental_working_set_mb": null,
+      "decision": "not selected",
+      "notes": "20,000 hot, cache-bypassed component operations; approximately 40x the sorted mmap median. Its checksum is implementation-specific and is not used as parity evidence."
+    }
+  ],
+  "audio_component": {
+    "individual_file_open_read_us": 314.0,
+    "individual_file_open_read_p95_us": 611.6,
+    "mmap_pack_view_us": 1.2,
+    "mmap_pack_view_p95_us": 3.7,
+    "http_individual_files_keep_alive_us": 1225.0,
+    "http_individual_files_keep_alive_p95_us": 1552.6,
+    "http_mmap_pack_keep_alive_us": 549.0,
+    "http_mmap_pack_keep_alive_p95_us": 776.8,
+    "sample_files": 2000,
+    "notes": "Real 2,000-file component sample supplied by the optimized add-on implementation experiments."
+  },
+  "selected_addon_asset_path": {
+    "version": "bbdb8223f72ede22",
+    "row_id_record_count": 590411,
+    "row_id_records_bytes": 9446576,
+    "index_header_bytes": 64,
+    "row_id_index_file_bytes": 9446640,
+    "pack_bytes": 1713724873,
+    "pack_storage_relationship": "NTFS hardlink to the Rust bundle pack; both servers share one physical pack allocation.",
+    "index_record_bytes": 16,
+    "lookup": "Retained immutable SQLite selects and orders candidate row IDs; a bounded row/response LRU caches repeats.",
+    "audio_resolution": "Each row ID resolves in O(1) through a fixed 16-byte mmap record into a lazily mapped pack slice.",
+    "activation": "--lookup-mode sqlite automatically opens user_files/fast_audio/active.json when the compiled pack is present.",
+    "one_time_rust_bundle_import_seconds": 9.7881297,
+    "hardened_verified_reimport_seconds": 12.375,
+    "hardened_verified_reimport_wall_seconds": 13.615,
+    "full_lookup_and_pack_blake3_verify_seconds": 1.677242,
+    "rust_lookup_sha256": "ad32f820f695d71f5ac8e77bee58325bb401c775921d8abb485d4749a2498270",
+    "rust_pack_sha256": "ee099859f3a3e40cde9602a065b9a8091d0ab4d35864e136c481b2ee9e1dafee",
+    "addon_index_sha256": "1e2663083fcd1029a22c5078c70f589ea69d6eb99b9c98123accbb692af43327",
+    "live_process_before_requests_working_set_mib": 38.14,
+    "live_process_before_requests_private_mib": 25.75,
+    "notes": "The 9.45 MB row-ID index and 1.71 GB pack are memory-mapped lazily; pack size is virtual address space, not startup working-set residency."
+  },
+  "addon_verification": {
+    "python": "Anki CPython 3.13.5",
+    "resource_warnings_as_errors": true,
+    "tests_passed": 28,
+    "tests_total": 28,
+    "elapsed_seconds": 8.593,
+    "packed_leases_overlapped": 2,
+    "reload_completed_with_old_lease_open": true,
+    "old_immutable_version_bytes": "OggS-old",
+    "old_lease_holder_thread_completed": true,
+    "pre_fix_stale_publication_race_reproduced": true,
+    "post_fix_publish_waited_for_active_db_reader": true,
+    "post_fix_next_lookup_returned_new_data": true,
+    "all_test_threads_completed": true,
+    "packed_soak_clients": 16,
+    "packed_soak_requests": 2064,
+    "packed_soak_errors": 0,
+    "packed_soak_reconnects": 0,
+    "packed_soak_pool_peak_connections": 16,
+    "packed_soak_pool_idle_at_end": 16,
+    "packed_soak_elapsed_seconds": 1.4467,
+    "packed_soak_lookup_p50_ms": 11.16,
+    "packed_soak_lookup_p95_ms": 23.402,
+    "packed_soak_lookup_p99_ms": 33.188,
+    "packed_soak_audio_p50_ms": 4.194,
+    "packed_soak_audio_p95_ms": 7.525,
+    "packed_soak_audio_p99_ms": 9.638,
+    "packed_soak_working_set_before_bytes": 38703104,
+    "packed_soak_working_set_after_bytes": 67219456,
+    "packed_soak_private_before_bytes": 26734592,
+    "packed_soak_private_after_bytes": 36835328,
+    "coverage": "Legacy and packed play/cache behavior, full/open/suffix/ranged-HEAD HTTP semantics, clean 304, OPTIONS conditional headers, malformed overlay handling, pack lease/reload lifetime, DB publish/cache epoch ordering, atomic memory publication, reload during serialization, blocked audio writers, historical immutable URLs across reload/restart, direct-play selection swaps, corruption rejection, and resource closure.",
+    "notes": "The reviewer deterministically reproduced the pre-fix stale-cache publication race before validating the epoch/lease fix; this is regression evidence, not merely a code inspection."
+  },
+  "addon_exhaustive_parity": {
+    "total_cases": 743634,
+    "mismatches": 0,
+    "elapsed_seconds": 70.18545,
+    "sqlite_quick_check": "ok",
+    "cache_growth": 0,
+    "idle_read_only_connections_at_end": 1,
+    "matrices": [
+      {
+        "name": "every term-only expression",
+        "cases": 280396,
+        "returned_rows": 590410,
+        "ordered_sha256": "9661d6d3f2144bdfb2d3c22814e072b3455effbfced3a57362a9deccd5f7494f"
+      },
+      {
+        "name": "every distinct non-null exact expression/reading key",
+        "cases": 242976,
+        "returned_rows": 540267,
+        "ordered_sha256": "7660a74487bedb87d85e7804105ca8441a13db8f5d3c957802ba37ffc2f48125"
+      },
+      {
+        "name": "ordered source subsets/permutations",
+        "cases": 51675,
+        "returned_rows": 467712,
+        "ordered_sha256": "b8a517a7c2c5b43a964eecdc36b78e61f88fe8f38230a5eb844199648c02d29e"
+      },
+      {
+        "name": "comprehensive Forvo filters across all five speakers",
+        "cases": 168587,
+        "returned_rows": 470132,
+        "ordered_sha256": "fbb6e6eaeb1c4803402adb96107afe381d78b6157347434a962e3623b94319f7"
+      }
+    ]
+  },
+  "addon_http_architecture": {
+    "rows": [
+      {
+        "name": "legacy HTTP/1.0 + new DB connection",
+        "cached_keep_alive_us": 5698.2,
+        "unique_keep_alive_us": 5815.7,
+        "new_connection_cached_us": null,
+        "decision": "baseline"
+      },
+      {
+        "name": "ThreadingHTTPServer HTTP/1.1",
+        "cached_keep_alive_us": 649.3,
+        "unique_keep_alive_us": 795.7,
+        "new_connection_cached_us": 3386.2,
+        "decision": "selected"
+      },
+      {
+        "name": "dedicated stdlib asyncio loop",
+        "cached_keep_alive_us": 696.3,
+        "unique_keep_alive_us": 858.8,
+        "new_connection_cached_us": 2698.2,
+        "decision": "not selected"
+      }
+    ]
+  },
+  "desktop_database_regeneration": {
+    "fixture_rows": 100000,
+    "trials_per_mode": 7,
+    "rows": [
+      {"name": "per-row + live index", "median_seconds": 0.9321, "rows_per_second": 107280, "speedup_x": 1.0},
+      {"name": "per-row + deferred index", "median_seconds": 0.7531, "rows_per_second": 132776, "speedup_x": 1.24},
+      {"name": "8192-row batches + live index", "median_seconds": 0.8352, "rows_per_second": 119730, "speedup_x": 1.12},
+      {"name": "8192-row batches + deferred index", "median_seconds": 0.6381, "rows_per_second": 156720, "speedup_x": 1.46, "decision": "selected"}
+    ]
+  },
+  "native_component": {
+    "bundle_index_open_ms": 322.4348,
+    "lookup_iterations_per_mode": 20000,
+    "lookup_output_checksum_sorted_mph_preload": "38be26936e6110da",
+    "retained_sqlite_serialized_body_checksum": "2fd5b7414375934b",
+    "sqlite_parity_queries": 2048,
+    "sqlite_parity_pass": true,
+    "audio_sample_files": 2000,
+    "audio_sample_bytes": 9086003,
+    "mmap_pack_zero_copy_median_us": 358.3,
+    "mmap_pack_zero_copy_p95_us": 563.1,
+    "individual_file_open_read_median_us": 721.5,
+    "individual_file_open_read_p95_us": 2069.3,
+    "audio_output_checksum_both_modes": "1605142a31369600",
+    "compiler_prefetch_sample_files": 10000,
+    "compiler_prefetch_one_worker_files_per_second": 4135.13,
+    "compiler_prefetch_eight_workers_files_per_second": 25571.2,
+    "compiler_prefetch_eight_vs_one_speedup": 6.18,
+    "notes": "Native lookup timings include filter/order/URL/JSON work and bypass response caching. Sorted, MPH, and preload serialized bodies were byte-identical. A separate 2,048-query differential check found exact ordered (name, source, speaker, reading) tuple parity against SQLite; its whole-body checksum differed as expected because it serialized legacy row-ID URLs instead of bundle-audio-ID URLs. Native audio timings create the exact zero-copy Bytes owner used by HTTP and touch/hash the warm sampled payload; this is broader work than the add-on's 1.2 us pack-slice-view-only microbenchmark and the two figures are not directly comparable. End-to-end HTTP is measured independently."
+  },
+  "native_http_architecture": {
+    "source_file": "rust-http-architecture.json",
+    "source_executable_sha256": "75d2bd58a8719e1392a8474c000a25ec5d48e57324ee2bab2d52277d73b39faa",
+    "qualification": "Performance matrix predates only the additive /v1/candidates reading-field rebuild; lookup, audio, index, and transport code are unchanged in the final executable.",
+    "corpus_queries": 2048,
+    "mixed_requests_per_run": 4096,
+    "hot_requests_per_run": 1000,
+    "concurrent_requests_per_run": 2048,
+    "concurrency": 32,
+    "audio_requests_per_run": 200,
+    "repeats": 3,
+    "response_cache_entries": 0,
+    "trial_median_rows": [
+      {
+        "name": "mmap CHD MPH + pack",
+        "startup_ms": 538.2548,
+        "startup_working_set_bytes": 74330112,
+        "startup_private_bytes": 5369856,
+        "mixed_lookup_p50_us": 1079.5,
+        "mixed_lookup_p95_us": 2077.9,
+        "hot_lookup_p50_us": 1146.3,
+        "concurrency_rps": 9064.51,
+        "audio_p50_us": 1722.2,
+        "audio_p95_us": 3218.6,
+        "decision": "selected"
+      },
+      {
+        "name": "sorted mmap + pack",
+        "startup_ms": 655.0181,
+        "startup_working_set_bytes": 74326016,
+        "startup_private_bytes": 5361664,
+        "mixed_lookup_p50_us": 1029.6,
+        "mixed_lookup_p95_us": 2340.0,
+        "hot_lookup_p50_us": 1135.8,
+        "concurrency_rps": 7420.29,
+        "audio_p50_us": 1907.7,
+        "audio_p95_us": 4051.2,
+        "decision": "not selected"
+      },
+      {
+        "name": "preloaded HashMap + pack",
+        "startup_ms": 1042.8923,
+        "startup_working_set_bytes": 103976960,
+        "startup_private_bytes": 35565568,
+        "mixed_lookup_p50_us": 919.6,
+        "mixed_lookup_p95_us": 1767.9,
+        "hot_lookup_p50_us": 971.8,
+        "concurrency_rps": 7611.99,
+        "audio_p50_us": 1818.7,
+        "audio_p95_us": 3467.5,
+        "decision": "not selected"
+      },
+      {
+        "name": "sorted mmap + individual files",
+        "startup_ms": 528.0421,
+        "startup_working_set_bytes": 74362880,
+        "startup_private_bytes": 5394432,
+        "mixed_lookup_p50_us": 956.1,
+        "mixed_lookup_p95_us": 2174.6,
+        "hot_lookup_p50_us": 1058.9,
+        "concurrency_rps": 7124.98,
+        "audio_p50_us": 3009.5,
+        "audio_p95_us": 5167.9,
+        "decision": "asset mode rejected"
+      }
+    ],
+    "selection_rationale": "MPH+pack gives the best balanced desktop result: median 32-worker throughput was 22.2% above sorted+pack and 19.1% above preload; packed-audio latency was 42.8% lower than individual files, while avoiding preload's roughly 28.3 MiB extra startup working set and 1.94x startup median."
+  },
+  "native_bundle_compile": {
+    "version": "70ba998db1c770c4",
+    "mapping_rows": 590410,
+    "terms": 280396,
+    "unique_source_paths": 373911,
+    "additional_repeated_path_alias_references": 216499,
+    "exact_byte_unique_payloads": 373911,
+    "content_duplicate_assets": 0,
+    "pack_bytes": 1713724873,
+    "total_compile_seconds": 1032.358,
+    "pack_stage_seconds": 1017.1,
+    "notes": "Compiler exact-byte collision checks found no content-identical data at distinct source paths. Mapping aliases remain as postings while paths map to packed offsets."
+  },
+  "native_binary": {
+    "bytes": 3341312,
+    "sha256": "55540c1820555eca700d22f7003fc26b59ea556f91254651c6d689d41e7d4e4c",
+    "candidate_contract": "audioId, source, speaker, reading, name, mime, url",
+    "release_tests_passed": 4,
+    "release_tests_total": 4
+  }
+}
