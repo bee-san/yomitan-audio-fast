@@ -335,6 +335,28 @@ fn compile_inner(
     })
 }
 
+/// Mirrors `config.merge_sources` in the add-on: user entries win by `id`, but defaults
+/// missing from a pinned user list are appended, so both runtimes see the same sources.
+fn merge_sources(default_sources: &Value, user_sources: Option<&Value>) -> Value {
+    let Some(Value::Array(user)) = user_sources else {
+        return default_sources.clone();
+    };
+    let Value::Array(defaults) = default_sources else {
+        return Value::Array(user.clone());
+    };
+    let mut merged = user.clone();
+    for item in defaults {
+        let id = item.get("id").and_then(Value::as_str);
+        if !merged
+            .iter()
+            .any(|existing| existing.get("id").and_then(Value::as_str) == id)
+        {
+            merged.push(item.clone());
+        }
+    }
+    Value::Array(merged)
+}
+
 fn load_config(addon_root: &Path) -> Result<Vec<ConfigSource>> {
     let default_path = addon_root.join("default_config.json");
     let mut value: Value = serde_json::from_reader(
@@ -344,6 +366,7 @@ fn load_config(addon_root: &Path) -> Result<Vec<ConfigSource>> {
     let override_path = addon_root.join("user_files").join("config.json");
     if override_path.is_file() {
         let override_value: Value = serde_json::from_reader(File::open(&override_path)?)?;
+        let default_sources = value.get("sources").cloned();
         let base = value
             .as_object_mut()
             .ok_or_else(|| anyhow!("default config must be an object"))?;
@@ -352,6 +375,10 @@ fn load_config(addon_root: &Path) -> Result<Vec<ConfigSource>> {
             .ok_or_else(|| anyhow!("user config must be an object"))?;
         for (key, item) in replacement {
             base.insert(key.clone(), item.clone());
+        }
+        if let Some(defaults) = default_sources {
+            let merged = merge_sources(&defaults, base.get("sources"));
+            base.insert("sources".to_string(), merged);
         }
     }
     let config: Config = serde_json::from_value(value)?;

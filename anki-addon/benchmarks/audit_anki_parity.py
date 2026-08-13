@@ -45,6 +45,16 @@ def readonly_connection(path: Path) -> sqlite3.Connection:
     return connection
 
 
+def _format_display(template: str, display: Optional[str]) -> str:
+    """same fallback as fast_store._display_name: a template without %s stays verbatim"""
+    if display is None:
+        return template
+    try:
+        return template % display
+    except (TypeError, ValueError):
+        return template
+
+
 class DifferentialAudit:
     def __init__(self, root: Path, db_path: Path, progress_every: int) -> None:
         load_addon(root)
@@ -122,7 +132,7 @@ class DifferentialAudit:
             template = self.templates.get(source)
             if template is None:
                 continue
-            name = template % display if display is not None else template
+            name = _format_display(template, display)
             result.append((row_id, reading, source, speaker, display, name, filename))
         return result
 

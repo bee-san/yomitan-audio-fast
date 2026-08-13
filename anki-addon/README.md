@@ -40,6 +40,27 @@ complete candidate list, request filters, or fallback candidates are needed.
 
 Only one import, regeneration, pack, cleanup, or restore job runs at a time. Pack work has determinate progress and a visible Cancel button. Completed work is checkpointed every few seconds; a retry or later Anki start resumes it. Database and pack publication are atomic, and active requests retain a safe lease on the version they started with.
 
+## Source types
+
+`default_config.json` lists the built-in sources in candidate-priority order, and each entry's `type` selects an adapter:
+
+| Type | Folder layout |
+|---|---|
+| `nhk` | NHK16 `entries.json` plus `audio/` |
+| `ajt_jp` | AJT Japanese `index.json` plus `media/` or `audio/` |
+| `ozk5` | OZK5 `index.json` with `meta.media_dir` |
+| `jpod` | `<reading> - <term>.<ext>` files |
+| `forvo` | `<speaker>/<term>.<ext>` files |
+| `flat` | any audio file, its stem taken as the expression |
+
+`ajt_jp` picks its audio folder as `meta.media_dir` when that subfolder exists inside the source folder, otherwise the first of `media/` or `audio/`, so both the AJT sets and the Yomitan Ultimate Audio sets (`daijisen`, `taas`) load unchanged; a `meta.media_dir` that resolves outside the source folder is ignored. An index name whose container differs on disk (`.ogg` in the index, `.mp3` on disk) resolves by extension substitution, preferring `.mp3 .ogg .opus .m4a .aac .flac .wav .oga` in that order, and a name whose case differs from the file on disk resolves case-insensitively after both exact lookups miss.
+
+`flat` covers the extra Forvo sets (`forvo_ext`, `forvo_ext2`), which ship audio files and no metadata; those rows store no reading, so they match any reading for the term.
+
+Sources whose folder is absent contribute no rows, and a source with an unrecognized `type` is skipped with a message instead of blocking add-on load. `user_files/config.json` may override any source's `path`; built-in sources missing from that list are appended after it by `id`, so a config written by an earlier version still picks up new default sources. The `compile` tool in `rust-server/` applies the same union, so both runtimes agree on which sources are configured.
+
+Because of that union, deleting a built-in entry from `user_files/config.json` no longer disables it — it comes back on the next load. To stop a built-in source from producing candidates, point its `path` at a folder that holds no audio (or move its audio away) and regenerate the database.
+
 ## Pack layout
 
 ```text
