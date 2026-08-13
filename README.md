@@ -40,10 +40,17 @@ This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon`
 
 3. Restart Anki. Your local audio is now much faster.
 
+If the add-on finds a valid database and referenced audio, it will ask you to convert it.
+
 <img width="501" height="222" alt="image" src="https://github.com/user-attachments/assets/2febc4a8-6ad0-4e8e-bfe8-7e7340986740" />
 
+After a couple of minutes you'll see this:
 
-If the add-on finds a valid database and referenced audio but no valid pack, it schedules one background acceleration build for that data fingerprint. You can also choose:
+<img width="423" height="190" alt="image" src="https://github.com/user-attachments/assets/02bc670d-ab21-402a-b06e-bf4617ae01ec" />
+
+That's it. If you used Local Audio Server in Yomitan, you now have much faster audio <3
+
+If that doesn't work, do this:
 
 **Tools → Local Audio Server → Import existing audio collection…**
 
