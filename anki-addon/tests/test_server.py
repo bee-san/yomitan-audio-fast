@@ -206,6 +206,64 @@ class ServerTests(unittest.TestCase):
         response, _ = self.request("GET", "/v1/play?term=missing")
         self.assertEqual(response.status, 404)
 
+    def test_first_audio_fast_path_returns_one_unfiltered_candidate(self) -> None:
+        query = "?term=%E7%8C%AB&reading=%E3%81%AD%E3%81%93"
+        response, payload = self.request(
+            "GET", "/v1/first" + query + "&sources=forvo&user=alice"
+        )
+        self.assertEqual(response.status, 200)
+        parsed = json.loads(payload)
+        self.assertEqual(parsed["type"], "audioSourceList")
+        self.assertEqual(len(parsed["audioSources"]), 1)
+        self.assertEqual(parsed["audioSources"][0]["name"], "Source %s")
+        self.assertTrue(parsed["audioSources"][0]["url"].endswith("/s1/same.opus"))
+
+        response, payload = self.request("GET", "/v1/first?term=missing")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(payload)["audioSources"], [])
+
+    def test_first_audio_fast_path_keeps_cache_and_reading_semantics(self) -> None:
+        query = "?term=%E7%8C%AB&reading=%E3%81%AD%E3%81%93"
+        _, full_payload = self.request("GET", "/" + query)
+        _, first_payload = self.request("GET", "/v1/first" + query)
+        self.assertEqual(len(json.loads(full_payload)["audioSources"]), 3)
+        self.assertEqual(len(json.loads(first_payload)["audioSources"]), 1)
+        _, full_payload = self.request("GET", "/" + query)
+        self.assertEqual(len(json.loads(full_payload)["audioSources"]), 3)
+
+        response, payload = self.request("HEAD", "/v1/first" + query)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload, b"")
+
+        # A NULL-reading recording remains eligible for a mismatched reading.
+        _, payload = self.request(
+            "GET", "/v1/first?term=%E7%8C%AB&reading=%E9%81%95%E3%81%86"
+        )
+        self.assertTrue(
+            json.loads(payload)["audioSources"][0]["url"].endswith("/s1/same.opus")
+        )
+        _, payload = self.request(
+            "GET", "/v1/first?term=%E7%8A%AC&reading=%E9%81%95%E3%81%86"
+        )
+        self.assertEqual(json.loads(payload)["audioSources"], [])
+
+    def test_first_audio_fast_path_tracks_source_priority_changes(self) -> None:
+        query = "/v1/first?term=%E7%8C%AB&reading=%E3%81%AD%E3%81%93"
+        _, payload = self.request("GET", query)
+        self.assertTrue(
+            json.loads(payload)["audioSources"][0]["url"].endswith("/s1/same.opus")
+        )
+
+        self.store.replace_sources(
+            {"forvo": self.sources["forvo"], "s1": self.sources["s1"]}
+        )
+        _, payload = self.request("GET", query)
+        self.assertTrue(
+            json.loads(payload)["audioSources"][0]["url"].endswith(
+                "/forvo/alice/voice.mp3"
+            )
+        )
+
     def test_versioned_pack_deduplicates_bytes_and_survives_source_removal(self) -> None:
         result = fast_pack.build_audio_pack(
             self.db_path,

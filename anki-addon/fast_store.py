@@ -45,6 +45,12 @@ class LookupRequest:
     users: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class FirstAudioRequest:
+    expression: str
+    reading: Optional[str]
+
+
 class LruCache(Generic[TKey, TValue]):
     def __init__(self, capacity: int) -> None:
         self.capacity = max(0, capacity)
@@ -96,6 +102,9 @@ class LookupStore:
         self.db_path = db_path.resolve()
         self.sources = sources
         self.source_ids = tuple(sources.keys())
+        self._source_rank = {
+            source_id: rank for rank, source_id in enumerate(self.source_ids)
+        }
         self.base_url = base_url.rstrip("/")
         self.pack_root = pack_root.resolve()
         self.lookup_mode = lookup_mode if lookup_mode in ("sqlite", "memory") else "sqlite"
@@ -104,7 +113,7 @@ class LookupStore:
         self._state_transition = False
         self._state_readers = 0
         self._closed = False
-        self.response_cache: LruCache[tuple[int, int, LookupRequest], bytes] = LruCache(
+        self.response_cache: LruCache[tuple[int, int, object], bytes] = LruCache(
             response_cache_size
         )
         self.row_cache: LruCache[
@@ -369,6 +378,31 @@ class LookupStore:
             self._rows_unleased(request.expression, request.reading), request
         )
 
+    def _first_row_unleased(
+        self, request: FirstAudioRequest
+    ) -> Optional[LookupRow]:
+        # The final response is cached, so retaining every matching row in the
+        # row LRU only adds work and memory for this single-candidate endpoint.
+        rows = self._rows_uncached(request.expression, request.reading)
+        rank = self._source_rank
+        best = None
+        best_key = None
+        for row in rows:
+            source_rank = rank.get(row[2])
+            if source_rank is None:
+                continue
+            key = (
+                source_rank,
+                row[3] is not None,
+                row[1] is not None,
+                row[1] or "",
+                row[0],
+            )
+            if best_key is None or key < best_key:
+                best = row
+                best_key = key
+        return best
+
     def selected_rows(self, request: LookupRequest) -> list[LookupRow]:
         with self._leased_state():
             return self._selected_rows_unleased(request)
@@ -384,6 +418,44 @@ class LookupStore:
                 _pack_epoch,
             ):
                 return self._audio_url_with_pack(pack, row_id, source_id, filename)
+
+    def _first_lookup_with_pack(
+        self, request: FirstAudioRequest, pack: Optional[AudioPack]
+    ) -> bytes:
+        entries = []
+        row = self._first_row_unleased(request)
+        if row is not None:
+            row_id, _reading, source_id, _speaker, display, filename = row
+            name = self._display_name(source_id, display)
+            if name is not None:
+                entries.append(
+                    {
+                        "name": name,
+                        "url": self._audio_url_with_pack(
+                            pack, row_id, source_id, filename
+                        ),
+                    }
+                )
+        return json.dumps(
+            {"type": "audioSourceList", "audioSources": entries},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def lookup_first(self, request: FirstAudioRequest) -> bytes:
+        """Return only the first configured candidate without request filters."""
+
+        with self._leased_state():
+            with self._database_guard:
+                database_epoch = self._database_epoch
+            with self._leased_pack_snapshot() as (pack, pack_epoch):
+                cache_key = database_epoch, pack_epoch, request
+                found, cached = self.response_cache.get(cache_key)
+                if found:
+                    return cached or b""
+                payload = self._first_lookup_with_pack(request, pack)
+                self.response_cache.put(cache_key, payload)
+                return payload
 
     def candidates_payload(self, request: LookupRequest) -> bytes:
         candidates = []
@@ -688,6 +760,9 @@ class LookupStore:
         try:
             self.sources = dict(sources)
             self.source_ids = tuple(self.sources.keys())
+            self._source_rank = {
+                source_id: rank for rank, source_id in enumerate(self.source_ids)
+            }
             self._legacy_path_rows = None
             self.response_cache.clear()
         finally:
