@@ -29,6 +29,8 @@
 
 This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon` tells Anki to replace the old code while preserving its `user_files` automatically.
 
+**MUST HAVE https://github.com/yomidevs/local-audio-yomichan installed, or at least copy the audio files**
+
 1. Download [`local-audio-fast.ankiaddon`](https://github.com/bee-san/yomitan-audio-fast/releases/)
 
 
@@ -37,6 +39,9 @@ This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon`
 
 
 3. Restart Anki. Your local audio is now much faster.
+
+<img width="501" height="222" alt="image" src="https://github.com/user-attachments/assets/2febc4a8-6ad0-4e8e-bfe8-7e7340986740" />
+
 
 If the add-on finds a valid database and referenced audio but no valid pack, it schedules one background acceleration build for that data fingerprint. You can also choose:
 
