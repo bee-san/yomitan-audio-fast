@@ -22,7 +22,7 @@
 </p>
 
 1. Install https://github.com/yomidevs/local-audio-yomichan or https://github.com/friedrich-de/yomitan-ultimate-audio
-2. Install this
+2. Install [Yomitan Audio Fast](https://github.com/bee-san/yomitan-audio-fast/releases/latest/download/local-audio-fast.ankiaddon)
 3. Instantly get a speed boost, 23 seconds -> milliseconds
 
 # Install
