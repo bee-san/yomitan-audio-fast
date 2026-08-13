@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional, TypedDict
 
 from .config import ALL_SOURCES
 from .consts import DB_VERSION_FILE_NAME, JMDICT_FORMS_JSON_FILE_NAME
+from .fast_pack import BUILD_LOCK_NAME, _PackBuildLock, protected_cleanup_state_exists
 from .jp_util import is_hiragana
 from .util import QueryComponents, get_db_path, get_program_root_path, get_version_file_path
 
@@ -214,6 +215,12 @@ def init_db(
     """Build off to the side with deferred indexes, verify, then publish atomically."""
 
     destination = get_db_path().resolve()
+    packed_only_marker = destination.parent / "fast_audio" / "packed-only-v1.json"
+    if protected_cleanup_state_exists(packed_only_marker.parent):
+        raise RuntimeError(
+            "database regeneration is blocked while packed-only-v1.json exists; "
+            "restore the complete original collection first"
+        )
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(destination.name + f".building-{uuid.uuid4().hex}")
     try:
@@ -252,10 +259,16 @@ def init_db(
             if check != "ok":
                 raise sqlite3.DatabaseError(f"generated database failed quick_check: {check}")
         if publisher is None:
-            os.replace(temporary, destination)
+            with _PackBuildLock(packed_only_marker.parent / BUILD_LOCK_NAME):
+                if protected_cleanup_state_exists(packed_only_marker.parent):
+                    raise RuntimeError(
+                        "database regeneration became blocked before publication"
+                    )
+                os.replace(temporary, destination)
+                update_db_version()
         else:
             publisher(temporary)
-        update_db_version()
+            update_db_version()
     except Exception:
         try:
             temporary.unlink(missing_ok=True)

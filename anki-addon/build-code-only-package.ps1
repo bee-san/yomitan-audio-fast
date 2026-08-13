@@ -15,6 +15,7 @@ $rootFiles = @(
     'build-code-only-package.ps1',
     'config.py',
     'consts.py',
+    'cleanup.py',
     'db_utils.py',
     'default_config.json',
     'fast_pack.py',

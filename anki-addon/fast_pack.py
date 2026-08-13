@@ -8,6 +8,7 @@ import platform
 import re
 import shutil
 import sqlite3
+import stat
 import struct
 import time
 import uuid
@@ -40,6 +41,8 @@ MAX_AUDIO_BYTES = 64 * 1024 * 1024
 CHECKPOINT_INTERVAL_SECONDS = 2.0
 PROGRESS_INTERVAL_SECONDS = 0.1
 BUILD_LOCK_NAME = "build.lock"
+PACKED_ONLY_MARKER_NAME = "packed-only-v1.json"
+LOOSE_AUDIO_QUARANTINE_NAME = "loose-audio-originals-v1"
 VERSION_RE = re.compile(r"^[0-9a-f]{16}$")
 BUILD_STAGE_RE = re.compile(r"^\.building-[0-9a-f]{32}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -98,7 +101,20 @@ class _PackBuildLock:
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.file = self.path.open("a+b")
+        if self.path.is_symlink():
+            raise RuntimeError("audio pack build lock path is a symbolic link")
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(self.path, flags, 0o600)
+        except OSError as error:
+            raise RuntimeError("audio pack build lock could not be opened safely") from error
+        value = os.fstat(descriptor)
+        if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1:
+            os.close(descriptor)
+            raise RuntimeError("audio pack build lock is not a private regular file")
+        self.file = os.fdopen(descriptor, "r+b", buffering=0)
         self.file.seek(0, os.SEEK_END)
         if self.file.tell() == 0:
             self.file.write(b"\0")
@@ -135,6 +151,14 @@ class _PackBuildLock:
         finally:
             self.file.close()
             self.file = None
+
+
+def protected_cleanup_state_exists(pack_root: Path) -> bool:
+    """Fail closed if cleanup metadata or its reserved quarantine is present."""
+
+    return os.path.lexists(pack_root / PACKED_ONLY_MARKER_NAME) or os.path.lexists(
+        pack_root / LOOSE_AUDIO_QUARANTINE_NAME
+    )
 
 
 class AudioPack:
@@ -568,6 +592,31 @@ def import_rust_bundle(
     bundle_root: Path,
     callback: Optional[Callable[[str], None]] = None,
 ) -> dict:
+    pack_root = pack_root.resolve()
+    packed_only_marker = pack_root / PACKED_ONLY_MARKER_NAME
+    if protected_cleanup_state_exists(pack_root):
+        raise RuntimeError(
+            "Rust bundle import is blocked while packed-only-v1.json exists"
+        )
+    with _PackBuildLock(pack_root / BUILD_LOCK_NAME):
+        if protected_cleanup_state_exists(pack_root):
+            raise RuntimeError(
+                "Rust bundle import became blocked before publication"
+            )
+        return _import_rust_bundle_locked(
+            db_path,
+            pack_root,
+            bundle_root,
+            callback,
+        )
+
+
+def _import_rust_bundle_locked(
+    db_path: Path,
+    pack_root: Path,
+    bundle_root: Path,
+    callback: Optional[Callable[[str], None]] = None,
+) -> dict:
     """Publish a row-id index over a verified Rust pack without rereading audio.
 
     The Rust compiler stores one sorted audio-table record per distinct
@@ -580,7 +629,6 @@ def import_rust_bundle(
     started = __import__("time").perf_counter()
     db_path = db_path.resolve(strict=True)
     bundle_root = bundle_root.resolve(strict=True)
-    pack_root = pack_root.resolve()
     versions_root = pack_root / "versions"
     versions_root.mkdir(parents=True, exist_ok=True)
     manifest_path = bundle_root / "manifest.json"
@@ -1161,7 +1209,20 @@ def build_audio_pack(
     """Build, checkpoint, resume, validate, then atomically activate an audio pack."""
 
     pack_root = pack_root.resolve()
+    # A packed-only marker means loose originals were intentionally removed and
+    # this pack is the serving copy. This core check protects standalone callers
+    # as well as the Anki GUI from publishing an incomplete replacement.
+    packed_only_marker = pack_root / PACKED_ONLY_MARKER_NAME
+    if protected_cleanup_state_exists(pack_root):
+        raise RuntimeError(
+            "audio pack rebuild is blocked while packed-only-v1.json exists; "
+            "restore and verify the cleanup quarantine first"
+        )
     with _PackBuildLock(pack_root / BUILD_LOCK_NAME):
+        if protected_cleanup_state_exists(pack_root):
+            raise RuntimeError(
+                "audio pack rebuild is blocked while packed-only-v1.json exists"
+            )
         return _build_audio_pack_locked(
             db_path,
             pack_root,

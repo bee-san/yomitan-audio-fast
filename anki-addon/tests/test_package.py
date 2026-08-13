@@ -14,6 +14,7 @@ class PackageDefinitionTests(unittest.TestCase):
         script = (ROOT / "build-code-only-package.ps1").read_text(encoding="utf-8")
         required = {
             "__init__.py",
+            "cleanup.py",
             "fast_pack.py",
             "gui.py",
             "import_dialog.py",

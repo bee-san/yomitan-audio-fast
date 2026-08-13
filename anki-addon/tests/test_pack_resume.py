@@ -227,6 +227,23 @@ class PackResumeTests(unittest.TestCase):
                     self.db_path, pack_root, self.sources, workers=2
                 )
 
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks are unavailable")
+    def test_build_lock_symlink_never_mutates_its_target(self) -> None:
+        pack_root = self.root / "symlink-lock-pack"
+        pack_root.mkdir()
+        outside = self.root / "outside-lock-target"
+        outside.write_bytes(b"outside-safe")
+        lock = pack_root / fast_pack.BUILD_LOCK_NAME
+        try:
+            lock.symlink_to(outside)
+        except OSError as error:
+            self.skipTest(f"symlink creation unavailable: {error}")
+        with self.assertRaisesRegex(RuntimeError, "symbolic link|safely"):
+            fast_pack.build_audio_pack(
+                self.db_path, pack_root, self.sources, workers=2
+            )
+        self.assertEqual(outside.read_bytes(), b"outside-safe")
+
 
 if __name__ == "__main__":
     unittest.main()

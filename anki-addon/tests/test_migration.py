@@ -203,6 +203,49 @@ class MigrationTests(unittest.TestCase):
         persisted = json.loads(config_path.read_text(encoding="utf-8"))
         self.assertEqual(persisted["sources"][0]["path"], str(expected))
 
+    def test_cleanup_state_cannot_race_source_config_publication(self) -> None:
+        destination_db = self.installed_user / "entries.db"
+        config_path = self.installed_user / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "sources": [
+                        {
+                            "type": "jpod",
+                            "id": "s1",
+                            "path": "user_files/s1_files",
+                            "display": "Source",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        pack_root = self.installed_user / "fast_audio"
+
+        def publisher(temporary: Path) -> None:
+            os.replace(temporary, destination_db)
+            pack_root.mkdir(parents=True, exist_ok=True)
+            (pack_root / "packed-only-v1.json").write_text("{}", encoding="utf-8")
+
+        before_sources = dict(self.sources)
+        with patch.object(migration, "get_config_path", return_value=config_path), patch.object(
+            migration,
+            "read_config",
+            return_value=json.loads(config_path.read_text(encoding="utf-8")),
+        ), patch.object(migration, "update_db_version"):
+            with self.assertRaisesRegex(RuntimeError, "source configuration"):
+                migration.process_existing_collection(
+                    self.external,
+                    self.sources,
+                    destination_db,
+                    pack_root,
+                    publisher=publisher,
+                )
+        self.assertEqual(self.sources, before_sources)
+        persisted = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(persisted["sources"][0]["path"], "user_files/s1_files")
+
     def test_invalid_unknown_database_source_is_rejected_before_config_write(self) -> None:
         unknown_db = self.external_user / "unknown.db"
         self._database(unknown_db, "unknown")
@@ -248,6 +291,10 @@ class MigrationTests(unittest.TestCase):
             self.external_db, pack_root, auto_sources, pack_is_active=False
         )
         self.assertIsNotNone(fingerprint)
+        assert fingerprint is not None
+        self.assertIsNone(
+            migration.automatic_pack_build_state(pack_root, fingerprint)
+        )
         with patch.object(migration, "_PROCESS_TOKEN", "next-anki-process"):
             self.assertEqual(
                 migration.claim_automatic_pack_build(
@@ -255,7 +302,10 @@ class MigrationTests(unittest.TestCase):
                 ),
                 fingerprint,
             )
-            assert fingerprint is not None
+            self.assertEqual(
+                migration.automatic_pack_build_state(pack_root, fingerprint),
+                "started",
+            )
             migration.finish_automatic_pack_build(pack_root, fingerprint, "paused")
             self.assertEqual(
                 migration.claim_automatic_pack_build(
@@ -269,6 +319,23 @@ class MigrationTests(unittest.TestCase):
                     self.external_db, pack_root, auto_sources, pack_is_active=False
                 )
             )
+
+    def test_declined_automatic_build_is_not_offered_again_for_same_collection(self) -> None:
+        pack_root = self.installed_user / "declined-pack"
+        auto_sources = migration.remap_sources(
+            self.sources, {"s1": self.external_source}
+        )
+        fingerprint = migration.claim_automatic_pack_build(
+            self.external_db, pack_root, auto_sources, pack_is_active=False
+        )
+        self.assertIsNotNone(fingerprint)
+        assert fingerprint is not None
+        migration.finish_automatic_pack_build(pack_root, fingerprint, "declined")
+        self.assertIsNone(
+            migration.claim_automatic_pack_build(
+                self.external_db, pack_root, auto_sources, pack_is_active=False
+            )
+        )
 
     def test_automatic_build_requires_a_supported_audio_file(self) -> None:
         config_only = self.root / "config-only"

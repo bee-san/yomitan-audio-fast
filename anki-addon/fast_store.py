@@ -13,7 +13,14 @@ from pathlib import Path
 from typing import Generic, Iterable, Optional, TypeVar
 from urllib.parse import quote
 
-from .fast_pack import AudioPack, MIME_BY_ID, MIME_ID_BY_SUFFIX
+from .fast_pack import (
+    AudioPack,
+    BUILD_LOCK_NAME,
+    MIME_BY_ID,
+    MIME_ID_BY_SUFFIX,
+    _PackBuildLock,
+    protected_cleanup_state_exists,
+)
 
 
 TKey = TypeVar("TKey")
@@ -113,6 +120,7 @@ class LookupStore:
         self._maximum_idle_connections = 16
         self._memory_rows: Optional[dict[str, tuple[LookupRow, ...]]] = None
         self._memory_load_seconds = 0.0
+        self._legacy_path_rows: Optional[dict[tuple[str, str], int]] = None
         self._pack_guard = threading.RLock()
         self._pack: Optional[AudioPack] = None
         self._pack_epoch = 0
@@ -350,7 +358,10 @@ class LookupStore:
 
     def lookup_uncached(self, request: LookupRequest) -> bytes:
         with self._leased_state():
-            with self._leased_pack_snapshot() as (pack, _pack_epoch):
+            with self._leased_pack_snapshot(state_already_leased=True) as (
+                pack,
+                _pack_epoch,
+            ):
                 return self._lookup_with_pack(request, pack)
 
     def _selected_rows_unleased(self, request: LookupRequest) -> list[LookupRow]:
@@ -368,14 +379,20 @@ class LookupStore:
             if not selected:
                 return None
             row_id, _reading, source_id, _speaker, _display, filename = selected[0]
-            with self._leased_pack_snapshot() as (pack, _pack_epoch):
+            with self._leased_pack_snapshot(state_already_leased=True) as (
+                pack,
+                _pack_epoch,
+            ):
                 return self._audio_url_with_pack(pack, row_id, source_id, filename)
 
     def candidates_payload(self, request: LookupRequest) -> bytes:
         candidates = []
         with self._leased_state():
             selected = self._selected_rows_unleased(request)
-            with self._leased_pack_snapshot() as (pack, _pack_epoch):
+            with self._leased_pack_snapshot(state_already_leased=True) as (
+                pack,
+                _pack_epoch,
+            ):
                 pack_version = pack.version if pack is not None else "legacy"
                 for row_id, reading, source_id, speaker, display, filename in selected:
                     name = self._display_name(source_id, display)
@@ -410,7 +427,10 @@ class LookupStore:
         with self._leased_state():
             with self._database_guard:
                 database_epoch = self._database_epoch
-            with self._leased_pack_snapshot() as (pack, pack_epoch):
+            with self._leased_pack_snapshot(state_already_leased=True) as (
+                pack,
+                pack_epoch,
+            ):
                 cache_key = database_epoch, pack_epoch, request
                 found, cached = self.response_cache.get(cache_key)
                 if found:
@@ -427,32 +447,58 @@ class LookupStore:
                 return
             yield pack, pack.get(audio_id)
 
+    def packed_target_for_legacy_path(
+        self, source_id: str, filename: str
+    ) -> Optional[tuple[str, int]]:
+        """Resolve a cached pre-pack URL after verified loose-file cleanup."""
+
+        normalized = filename.replace("\\", "/")
+        with self._leased_state():
+            with self._database_guard:
+                if self._legacy_path_rows is None:
+                    by_path: dict[tuple[str, str], int] = {}
+                    with self._leased_connection() as connection:
+                        for row_id, row_source, row_filename in connection.execute(
+                            "SELECT id,source,file FROM entries ORDER BY id"
+                        ):
+                            key = row_source, row_filename.replace("\\", "/")
+                            by_path.setdefault(key, int(row_id))
+                    self._legacy_path_rows = by_path
+                row_id = self._legacy_path_rows.get((source_id, normalized))
+            if row_id is None:
+                return None
+            with self._leased_pack_snapshot(state_already_leased=True) as (
+                pack,
+                _pack_epoch,
+            ):
+                if pack is None:
+                    return None
+                if pack.get(row_id) is not None:
+                    return pack.version, row_id
+        return None
+
     @contextmanager
-    def _leased_pack_snapshot(self, version: Optional[str] = None):
+    def _leased_pack_snapshot(
+        self,
+        version: Optional[str] = None,
+        *,
+        state_already_leased: bool = False,
+    ):
         # Take the state and pack locks together only long enough to snapshot and
         # increment the identity lease.  Lifecycle transitions cannot slip
         # between the closed check and the increment, while slow socket writes
         # hold neither lock.
-        with self._state_changed:
-            while self._state_transition and not self._closed:
-                self._state_changed.wait()
-            if self._closed:
-                raise RuntimeError("lookup store is closed")
+        if state_already_leased:
             with self._pack_guard:
-                pack = None
-                if version is None:
-                    pack = self._pack
-                elif self._pack is not None and self._pack.version == version:
-                    pack = self._pack
-                else:
-                    pack = self._historical_packs.get(version)
-                    if pack is None:
-                        pack = AudioPack.open_version(self.pack_root, version)
-                        if pack is not None:
-                            self._historical_packs[version] = pack
-                pack_epoch = self._pack_epoch
-                if pack is not None:
-                    self._pack_leases[pack] = self._pack_leases.get(pack, 0) + 1
+                pack, pack_epoch = self._acquire_pack_snapshot_locked(version)
+        else:
+            with self._state_changed:
+                while self._state_transition and not self._closed:
+                    self._state_changed.wait()
+                if self._closed:
+                    raise RuntimeError("lookup store is closed")
+                with self._pack_guard:
+                    pack, pack_epoch = self._acquire_pack_snapshot_locked(version)
         try:
             yield pack, pack_epoch
         finally:
@@ -471,6 +517,25 @@ class LookupStore:
                             close_pack = pack
             if close_pack is not None:
                 self._close_pack_safely(close_pack)
+
+    def _acquire_pack_snapshot_locked(
+        self, version: Optional[str]
+    ) -> tuple[Optional[AudioPack], int]:
+        pack = None
+        if version is None:
+            pack = self._pack
+        elif self._pack is not None and self._pack.version == version:
+            pack = self._pack
+        else:
+            pack = self._historical_packs.get(version)
+            if pack is None:
+                pack = AudioPack.open_version(self.pack_root, version)
+                if pack is not None:
+                    self._historical_packs[version] = pack
+        pack_epoch = self._pack_epoch
+        if pack is not None:
+            self._pack_leases[pack] = self._pack_leases.get(pack, 0) + 1
+        return pack, pack_epoch
 
     @staticmethod
     def _close_pack_safely(pack: AudioPack) -> None:
@@ -536,6 +601,17 @@ class LookupStore:
 
     def publish_database(self, temporary: Path) -> None:
         temporary = temporary.resolve(strict=True)
+        with _PackBuildLock(self.pack_root / BUILD_LOCK_NAME):
+            self._publish_database_locked(temporary)
+
+    def _publish_database_locked(self, temporary: Path) -> None:
+        """Publish while holding the same OS lock as pack build/cleanup."""
+
+        packed_only_marker = self.pack_root / "packed-only-v1.json"
+        if protected_cleanup_state_exists(self.pack_root):
+            raise RuntimeError(
+                "database publication is blocked while packed-only-v1.json exists"
+            )
         replacement_rows = None
         replacement_seconds = 0.0
         memory_fallback = False
@@ -548,6 +624,10 @@ class LookupStore:
                 memory_fallback = True
         self._begin_state_transition()
         try:
+            if protected_cleanup_state_exists(self.pack_root):
+                raise RuntimeError(
+                    "database publication became blocked before activation"
+                )
             with self._database_changed:
                 self._begin_database_publish()
                 try:
@@ -560,6 +640,7 @@ class LookupStore:
                             self._memory_rows = replacement_rows
                             self._memory_load_seconds = replacement_seconds
                     self._database_epoch += 1
+                    self._legacy_path_rows = None
                     self.row_cache.clear()
                     self.response_cache.clear()
                     # Keep the publication gate closed while the compatible
@@ -572,27 +653,33 @@ class LookupStore:
             self._end_state_transition()
 
     def invalidate_database(self) -> None:
-        self._begin_state_transition()
-        try:
-            with self._database_changed:
-                self._begin_database_publish()
-                try:
-                    if self.lookup_mode == "memory":
-                        try:
-                            rows, elapsed = self._build_memory_rows()
-                            self._memory_rows = rows
-                            self._memory_load_seconds = elapsed
-                        except MemoryError:
-                            self.lookup_mode = "sqlite"
-                            self._memory_rows = None
-                    self._database_epoch += 1
-                    self.row_cache.clear()
-                    self.response_cache.clear()
-                    self._reload_pack_unleased()
-                finally:
-                    self._end_database_publish()
-        finally:
-            self._end_state_transition()
+        with _PackBuildLock(self.pack_root / BUILD_LOCK_NAME):
+            if protected_cleanup_state_exists(self.pack_root):
+                raise RuntimeError(
+                    "database invalidation is blocked while packed-only-v1.json exists"
+                )
+            self._begin_state_transition()
+            try:
+                with self._database_changed:
+                    self._begin_database_publish()
+                    try:
+                        if self.lookup_mode == "memory":
+                            try:
+                                rows, elapsed = self._build_memory_rows()
+                                self._memory_rows = rows
+                                self._memory_load_seconds = elapsed
+                            except MemoryError:
+                                self.lookup_mode = "sqlite"
+                                self._memory_rows = None
+                        self._database_epoch += 1
+                        self._legacy_path_rows = None
+                        self.row_cache.clear()
+                        self.response_cache.clear()
+                        self._reload_pack_unleased()
+                    finally:
+                        self._end_database_publish()
+            finally:
+                self._end_state_transition()
 
     def replace_sources(self, sources: dict) -> None:
         """Atomically replace source roots after an existing-data import."""
@@ -601,6 +688,7 @@ class LookupStore:
         try:
             self.sources = dict(sources)
             self.source_ids = tuple(self.sources.keys())
+            self._legacy_path_rows = None
             self.response_cache.clear()
         finally:
             self._end_state_transition()
@@ -618,6 +706,7 @@ class LookupStore:
                 self._begin_database_publish()
                 try:
                     self._memory_rows = None
+                    self._legacy_path_rows = None
                     self._database_epoch += 1
                 finally:
                     self._end_database_publish()

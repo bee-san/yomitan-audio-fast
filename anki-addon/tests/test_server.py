@@ -7,17 +7,20 @@ import importlib.util
 import json
 import os
 import gc
+import shutil
 import sqlite3
 import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import quote, urlsplit
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).parents[1]
@@ -225,6 +228,9 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(all("/v/" in entry["url"] for entry in entries))
         self.first_audio.unlink()
         self.same_audio.unlink()
+        response, body = self.request("GET", "/s1/tone.opus")
+        self.assertEqual((response.status, body), (200, self.first_bytes))
+        self.assertEqual(response.getheader("Cache-Control"), "public, max-age=3600")
         response, body = self.request("GET", urlsplit(entries[0]["url"]).path)
         self.assertEqual((response.status, body), (200, self.first_bytes))
         response, body = self.request(
@@ -358,6 +364,72 @@ class ServerTests(unittest.TestCase):
             [entry["name"] for entry in json.loads(payload)["audioSources"]],
             ["Source [2]"],
         )
+
+    def test_database_publish_cannot_cross_pack_maintenance_lock(self) -> None:
+        replacement = self.root / "locked-replacement.db"
+        shutil.copy2(self.db_path, replacement)
+        before = self.db_path.read_bytes()
+        with fast_pack._PackBuildLock(
+            self.pack_root / fast_pack.BUILD_LOCK_NAME
+        ):
+            with self.assertRaisesRegex(RuntimeError, "already running"):
+                self.store.publish_database(replacement)
+        self.assertEqual(self.db_path.read_bytes(), before)
+        self.assertTrue(replacement.is_file())
+
+    def test_legacy_path_lookup_cannot_deadlock_pack_reload(self) -> None:
+        fast_pack.build_audio_pack(
+            self.db_path, self.pack_root, self.sources, workers=1
+        )
+        self.assertTrue(self.store.reload_pack())
+        entered_snapshot = threading.Event()
+        continue_snapshot = threading.Event()
+        results = []
+        errors = []
+        original_snapshot = self.store._leased_pack_snapshot
+
+        def delayed_snapshot(*args, **kwargs):
+            self.assertTrue(kwargs.get("state_already_leased"))
+            entered_snapshot.set()
+            if not continue_snapshot.wait(5):
+                raise TimeoutError("test did not release the pack snapshot")
+            return original_snapshot(*args, **kwargs)
+
+        def lookup() -> None:
+            try:
+                results.append(
+                    self.store.packed_target_for_legacy_path("s1", "tone.opus")
+                )
+            except BaseException as error:
+                errors.append(error)
+
+        def reload() -> None:
+            try:
+                self.store.reload_pack()
+            except BaseException as error:
+                errors.append(error)
+
+        with patch.object(self.store, "_leased_pack_snapshot", delayed_snapshot):
+            lookup_thread = threading.Thread(target=lookup)
+            reload_thread = threading.Thread(target=reload)
+            lookup_thread.start()
+            self.assertTrue(entered_snapshot.wait(5))
+            reload_thread.start()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                with self.store._state_changed:
+                    if self.store._state_transition:
+                        break
+                time.sleep(0.001)
+            else:
+                self.fail("pack reload did not enter its state transition")
+            continue_snapshot.set()
+            lookup_thread.join(5)
+            reload_thread.join(5)
+        self.assertFalse(lookup_thread.is_alive())
+        self.assertFalse(reload_thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(results, [(self.store._pack.version, 1)])
 
     def test_database_pool_reuses_connections_across_http_threads(self) -> None:
         port = self.server.server_address[1]

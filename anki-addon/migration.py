@@ -14,7 +14,12 @@ from typing import Callable, Optional
 
 from .config import get_config_path, read_config
 from .db_utils import init_db, update_db_version
-from .fast_pack import build_audio_pack
+from .fast_pack import (
+    BUILD_LOCK_NAME,
+    _PackBuildLock,
+    build_audio_pack,
+    protected_cleanup_state_exists,
+)
 from .fast_pack import PackBuildCancelled, PackProgress
 from .source.audio_source import AudioSourceData
 
@@ -135,6 +140,48 @@ def validate_entries_database(path: Path, allowed_sources: set[str]) -> dict:
     return {"rows": rows, "sources": sorted(database_sources), "quick_check": check}
 
 
+def inspect_installed_collection(path: Path, sources: dict) -> dict:
+    """Describe the preserved same-ID collection for the one-click prompt."""
+
+    path = path.resolve(strict=True)
+    uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
+    with closing(sqlite3.connect(uri, uri=True)) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(entries)")
+        }
+        if not REQUIRED_ENTRY_COLUMNS.issubset(columns):
+            raise sqlite3.DatabaseError("entries.db does not have the expected schema")
+        rows = int(connection.execute("SELECT COUNT(*) FROM entries").fetchone()[0])
+        if rows <= 0:
+            raise sqlite3.DatabaseError("entries.db contains no audio mappings")
+        database_sources = {
+            row[0] for row in connection.execute("SELECT DISTINCT source FROM entries")
+        }
+    unknown = database_sources - set(sources)
+    if unknown:
+        raise ValueError(
+            "entries.db references unconfigured sources: "
+            + ", ".join(sorted(unknown))
+        )
+    configured_roots = 0
+    for source_id in database_sources:
+        source = sources.get(source_id)
+        if source is not None and source.get_media_dir_path().is_dir():
+            configured_roots += 1
+    if configured_roots != len(database_sources):
+        raise ValueError(
+            "only "
+            f"{configured_roots} of {len(database_sources)} configured source "
+            "folders are available; use Import existing audio collection to "
+            "choose the complete collection"
+        )
+    return {
+        "rows": rows,
+        "database_sources": len(database_sources),
+        "source_folders": configured_roots,
+    }
+
+
 def remap_sources(sources: dict, source_paths: dict[str, Path]) -> dict:
     remapped = {}
     for source_id, source in sources.items():
@@ -231,7 +278,13 @@ def _copy_database_for_publish(
             raise RuntimeError("source entries.db changed while it was being copied")
         validation = validate_entries_database(temporary, allowed_sources)
         if publisher is None:
-            os.replace(temporary, destination)
+            inferred_pack_root = destination.parent / "fast_audio"
+            with _PackBuildLock(inferred_pack_root / BUILD_LOCK_NAME):
+                if protected_cleanup_state_exists(inferred_pack_root):
+                    raise RuntimeError(
+                        "database import became blocked before publication"
+                    )
+                os.replace(temporary, destination)
         else:
             publisher(temporary)
         validation["mode"] = "copied"
@@ -256,6 +309,15 @@ def process_existing_collection(
     reload_pack: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Import metadata by copy, never audio, then build and atomically publish a pack."""
+
+    from .cleanup import load_packed_only_state
+
+    if protected_cleanup_state_exists(pack_root):
+        raise RuntimeError(
+            "import is blocked while this collection is packed-only. Restore the "
+            "original source audio to its configured folders first; a future "
+            "recovery action must verify the full replacement before publication."
+        )
 
     def check_cancel(stage: str, message: str) -> None:
         if should_cancel is not None and should_cancel():
@@ -306,11 +368,16 @@ def process_existing_collection(
     # Commit source configuration only after the database publication succeeds.
     # If packing subsequently fails, every layer consistently serves the new
     # collection through secure loose-file fallback and a manual retry is safe.
-    persist_source_paths(discovery.source_paths)
-    if replace_sources is not None:
-        replace_sources(migrated_sources)
-    sources.clear()
-    sources.update(migrated_sources)
+    with _PackBuildLock(pack_root / BUILD_LOCK_NAME):
+        if protected_cleanup_state_exists(pack_root):
+            raise RuntimeError(
+                "import became blocked before source configuration publication"
+            )
+        persist_source_paths(discovery.source_paths)
+        if replace_sources is not None:
+            replace_sources(migrated_sources)
+        sources.clear()
+        sources.update(migrated_sources)
 
     check_cancel(
         "packing",
@@ -420,18 +487,34 @@ def claim_automatic_pack_build(
     except (OSError, ValueError, json.JSONDecodeError):
         previous = {}
     if previous.get("fingerprint") == fingerprint:
-        if previous.get("status") == "failed":
+        if previous.get("status") in ("failed", "declined"):
             return None
         if (
             previous.get("status") == "started"
             and previous.get("owner") == _PROCESS_TOKEN
         ):
             return None
-    _atomic_json(
-        marker,
-        {"fingerprint": fingerprint, "status": "started", "owner": _PROCESS_TOKEN},
-    )
+    value = {"fingerprint": fingerprint, "status": "started", "owner": _PROCESS_TOKEN}
+    if (
+        previous.get("fingerprint") == fingerprint
+        and previous.get("status") in ("started", "paused")
+    ):
+        value["resumed_from"] = previous["status"]
+    _atomic_json(marker, value)
     return fingerprint
+
+
+def automatic_pack_build_state(pack_root: Path, fingerprint: str) -> Optional[str]:
+    try:
+        marker = json.loads(
+            (pack_root / AUTO_MARKER_NAME).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if marker.get("fingerprint") != fingerprint:
+        return None
+    status = marker.get("resumed_from")
+    return status if isinstance(status, str) else None
 
 
 def finish_automatic_pack_build(
