@@ -185,6 +185,18 @@ class StoreRaceTests(unittest.TestCase):
         self.assertEqual(row_epochs, {self.store._database_epoch})
         self.assertEqual(response_epochs, {self.store._database_epoch})
 
+    def test_first_audio_cache_follows_database_publication(self) -> None:
+        request = fast_store.FirstAudioRequest("cat", "reading")
+        old_payload = self.store.lookup_first(request)
+        self.assertIn(b"old-a", old_payload)
+
+        self.store.publish_database(
+            self._replacement_database("first-new-a", "first-new-b")
+        )
+        new_payload = self.store.lookup_first(request)
+        self.assertIn(b"first-new-a", new_payload)
+        self.assertNotIn(b"old-a", new_payload)
+
     def test_memory_publish_swaps_rows_before_waiters_resume(self) -> None:
         self.store.close()
         self.store = fast_store.LookupStore(

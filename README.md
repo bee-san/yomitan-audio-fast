@@ -119,6 +119,16 @@ Optional fast path for clients that can play a URL directly:
 http://127.0.0.1:5050/v1/play?term={term}&reading={reading}
 ```
 
+Or configure a Yomitan Custom JSON source that returns only the first candidate:
+
+```text
+http://127.0.0.1:5050/v1/first?term={term}&reading={reading}
+```
+
+`/v1/first` skips source/user filtering and stops after the first candidate in
+configured source order. Use the root endpoint when the complete candidate list,
+per-request filters, or fallback candidates are needed.
+
 `/v1/play` selects the highest-priority permitted recording and streams it in one request. It is intentionally `no-store`; returned versioned media URLs are immutable.
 
 ## How it became faster

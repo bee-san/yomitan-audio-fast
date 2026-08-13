@@ -17,6 +17,16 @@ The server binds to `127.0.0.1:5050` by default. Configure a Yomitan Custom JSON
 http://127.0.0.1:5050/?term={term}&reading={reading}
 ```
 
+For an opt-in single-candidate lookup, use:
+
+```text
+http://127.0.0.1:5050/v1/first?term={term}&reading={reading}
+```
+
+It returns only the first candidate in configured source order. Source and user
+filters are intentionally ignored; use the compatible root endpoint when the
+complete candidate list, request filters, or fallback candidates are needed.
+
 ## Anki Tools menu
 
 **Tools → Local Audio Server** contains:
@@ -58,6 +68,7 @@ After cleanup, database regeneration, import, and pack rebuilding are blocked be
 | Endpoint | Purpose |
 |---|---|
 | `GET /?term=...&reading=...` | Drop-in Yomitan `audioSourceList` |
+| `GET /v1/first?term=...&reading=...` | Single-candidate Yomitan list using configured source priority |
 | `GET /v1/play?term=...&reading=...` | Select and stream the first permitted recording |
 | `GET /v1/candidates?term=...&reading=...` | Rich candidates with stable IDs and source metadata |
 | `GET /v/<version>/audio/<id>` | Immutable packed audio |

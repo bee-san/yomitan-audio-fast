@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from .config import ALL_SOURCES, get_server_config
 from .consts import HOSTNAME, PORT
-from .fast_store import LookupRequest, LookupStore
+from .fast_store import FirstAudioRequest, LookupRequest, LookupStore
 from .util import get_db_path, get_program_root_path, get_version_file_path
 
 
@@ -119,7 +119,9 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
             extra=(("Cache-Control", "no-store"),),
         )
 
-    def _parse_lookup(self, query: str) -> LookupRequest:
+    def _parse_lookup_terms(
+        self, query: str
+    ) -> tuple[dict[str, list[str]], str, Optional[str]]:
         values = parse_qs(
             query,
             keep_blank_values=True,
@@ -139,6 +141,10 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
             reading = None
         if reading is not None and len(reading) > MAX_TERM_LENGTH:
             raise ValueError("reading is too long")
+        return values, expression, reading
+
+    def _parse_lookup(self, query: str) -> LookupRequest:
+        values, expression, reading = self._parse_lookup_terms(query)
         if "sources" in values:
             sources = tuple(
                 value.strip() for value in values["sources"][0].split(",") if value.strip()
@@ -155,6 +161,10 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
         if len(sources) > MAX_FILTER_VALUES or len(users) > MAX_FILTER_VALUES:
             raise ValueError("too many source or user filters")
         return LookupRequest(expression, reading, sources, users)
+
+    def _parse_first_lookup(self, query: str) -> FirstAudioRequest:
+        _values, expression, reading = self._parse_lookup_terms(query)
+        return FirstAudioRequest(expression, reading)
 
     @staticmethod
     def _range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
@@ -437,6 +447,21 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
             payload = json.dumps(
                 self.runtime.store.info(), ensure_ascii=False, separators=(",", ":")
             ).encode("utf-8")
+            self._payload(
+                HTTPStatus.OK,
+                payload,
+                "application/json; charset=utf-8",
+                head_only,
+                (("Cache-Control", "no-store"),),
+            )
+            return
+        if path == "/v1/first":
+            try:
+                request = self._parse_first_lookup(parsed.query)
+                payload = self.runtime.store.lookup_first(request)
+            except (ValueError, UnicodeError) as error:
+                self._error(HTTPStatus.BAD_REQUEST, str(error), head_only)
+                return
             self._payload(
                 HTTPStatus.OK,
                 payload,
