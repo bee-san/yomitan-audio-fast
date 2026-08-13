@@ -25,8 +25,6 @@
 2. Install this
 3. Instantly get a speed boost, 23 seconds -> milliseconds
 
-[curated final benchmark note](benchmarks/results/FINAL.md) and [raw metrics](benchmarks/results/standard-20260811-metrics.csv)
-
 # Install
 
 This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon` tells Anki to replace the old code while preserving its `user_files` automatically.
