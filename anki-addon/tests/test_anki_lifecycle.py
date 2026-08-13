@@ -223,6 +223,7 @@ class AnkiLifecycleTests(unittest.TestCase):
             ), patch.object(config_module, "get_config_path", return_value=user_path):
                 merged = config_module.read_config()
                 server = config_module.get_server_config()
+            # a user config without a "sources" key keeps the defaults verbatim
             self.assertEqual(merged["sources"], sources)
             self.assertEqual(
                 server,
@@ -260,6 +261,85 @@ class AnkiLifecycleTests(unittest.TestCase):
                     "row_cache_entries": 262144,
                 },
             )
+
+
+    def test_pinned_user_sources_keep_their_paths_and_gain_new_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            default_path = root / "default.json"
+            user_path = root / "user.json"
+            default_path.write_text(
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "type": "jpod",
+                                "id": "jpod",
+                                "path": "user_files/jpod_files",
+                                "display": "Jpod101",
+                            },
+                            {
+                                "type": "flat",
+                                "id": "forvo_ext",
+                                "path": "user_files/forvo_ext_files",
+                                "display": "Forvo Ext",
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            user_path.write_text(
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "type": "jpod",
+                                "id": "jpod",
+                                "path": "D:/audio/jpod_files",
+                                "display": "Jpod101",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(
+                config_module, "get_default_config_path", return_value=default_path
+            ), patch.object(config_module, "get_config_path", return_value=user_path):
+                merged = config_module.read_config()
+        self.assertEqual(
+            [(item["id"], item["path"]) for item in merged["sources"]],
+            [
+                ("jpod", "D:/audio/jpod_files"),
+                ("forvo_ext", "user_files/forvo_ext_files"),
+            ],
+        )
+
+    def test_invalid_user_sources_fall_back_to_the_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            default_path = root / "default.json"
+            user_path = root / "user.json"
+            sources = [
+                {
+                    "type": "jpod",
+                    "id": "jpod",
+                    "path": "user_files/jpod_files",
+                    "display": "Jpod101",
+                }
+            ]
+            default_path.write_text(
+                json.dumps({"sources": sources}), encoding="utf-8"
+            )
+            user_path.write_text(
+                json.dumps({"sources": "not a list"}), encoding="utf-8"
+            )
+            with patch.object(
+                config_module, "get_default_config_path", return_value=default_path
+            ), patch.object(config_module, "get_config_path", return_value=user_path):
+                merged = config_module.read_config()
+        self.assertEqual(merged["sources"], sources)
 
 
 if __name__ == "__main__":

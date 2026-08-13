@@ -12,9 +12,14 @@ The Git repository excludes the user's audio and every generated binary artifact
     entries.db
     nhk16_files/                    # source folders; exact roots come from config
     shinmeikai8_files/
+    daijisen_files/                 # Yomitan Ultimate Audio (AJT layout)
+    taas_files/                     # Yomitan Ultimate Audio (AJT layout)
     forvo_files/
+    forvo_ext_files/                # Yomitan Ultimate Audio (flat: audio files only)
+    forvo_ext2_files/
     jpod_files/
     jpod_alternate_files/
+    ozk5_files/
     fast_audio/                     # generated locally; never committed
 ```
 

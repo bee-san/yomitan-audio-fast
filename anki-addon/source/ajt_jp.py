@@ -2,6 +2,7 @@ from __future__ import annotations  # for Python 3.7-3.9
 
 import json
 import sqlite3
+from pathlib import Path, PurePosixPath
 from typing import Callable, Optional, Final, TypedDict
 # THIS REQUIRES A PIP INSTALL, making it impossible to use in Anki...
 #from typing_extensions import NotRequired
@@ -40,6 +41,7 @@ class AJTFile(TypedDict):
 
 class AJTMeta(TypedDict):
     version: int
+    media_dir: str
     # other fields are currently ignored for the purposes of this add-on
 
 
@@ -53,8 +55,56 @@ SQL: Final[
     str
 ] = "INSERT INTO entries (expression, reading, source, display, file) VALUES (?,?,?,?,?)"
 
+# preference order for resolving an index entry against a different container on disk;
+# also breaks stem collisions deterministically
+EXTENSION_PREFERENCE: Final[tuple] = (
+    ".mp3",
+    ".ogg",
+    ".opus",
+    ".m4a",
+    ".aac",
+    ".flac",
+    ".wav",
+    ".oga",
+)
+
+
+def walk_media_files(media_dir: Path) -> dict:
+    """posix-keyed relative name -> path, walked once instead of probing per headword"""
+    files = {}
+    for path in media_dir.rglob("*"):
+        if path.is_file():
+            files[path.relative_to(media_dir).as_posix()] = path
+    return files
+
+
+def resolve_media_file(files: dict, word_file: str) -> Optional[Path]:
+    key = PurePosixPath(word_file.replace("\\", "/")).as_posix()
+    path = files.get(key)
+    if path is not None:
+        return path
+    # some datasets ship a different container than the index names
+    stem = key[: len(key) - len(PurePosixPath(key).suffix)]
+    for extension in EXTENSION_PREFERENCE:
+        path = files.get(stem + extension)
+        if path is not None:
+            return path
+    return None
+
 
 class AJTJapaneseSource(AudioSource):
+    def get_media_dir_name(self, index: AJTIndex) -> str:
+        """AJT ships `media/`, the Yomitan Ultimate Audio sets ship `audio/`"""
+        root = self.get_media_dir_path()
+        meta = index.get("meta") or {}
+        name = meta.get("media_dir") if isinstance(meta, dict) else None
+        if isinstance(name, str) and name and root.joinpath(name).is_dir():
+            return name
+        for candidate in ("media", "audio"):
+            if root.joinpath(candidate).is_dir():
+                return candidate
+        return "media"
+
     def get_display_text(self, ajt_file: AJTFile) -> Optional[str]:
         """
         displays as katakana with number and downstep, i.e. "ヨ＼ム [1]"
@@ -95,15 +145,17 @@ class AJTJapaneseSource(AudioSource):
         with open(index_file, encoding="utf-8") as f:
             entries: AJTIndex = json.load(f)
             files = entries["files"]
+            media_dir = self.get_media_dir_path().joinpath(self.get_media_dir_name(entries))
+            on_disk = walk_media_files(media_dir)
 
             for expression, word_files in entries["headwords"].items():
                 if should_cancel is not None and should_cancel():
                     raise InterruptedError("database generation cancelled")
                 for word_file in word_files:
-                    fullpath = self.get_media_dir_path().joinpath("media").joinpath(word_file)
-                    relpath = fullpath.relative_to(self.get_media_dir_path())
-                    if not fullpath.is_file():
+                    fullpath = resolve_media_file(on_disk, word_file)
+                    if fullpath is None:
                         continue
+                    relpath = fullpath.relative_to(self.get_media_dir_path())
                     ajt_file = files.get(word_file, None)
                     if ajt_file is not None:
                         reading = ajt_file.get("kana_reading", None)
