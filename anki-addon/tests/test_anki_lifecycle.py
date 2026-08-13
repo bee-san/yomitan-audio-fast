@@ -113,6 +113,7 @@ class AnkiLifecycleTests(unittest.TestCase):
             (signal, callback)
         )
         fake_utils = types.ModuleType("aqt.utils")
+        fake_utils.askUser = lambda *args, **kwargs: False
         fake_utils.showInfo = lambda *args, **kwargs: None
         fake_utils.showWarning = lambda *args, **kwargs: None
         modules = {
@@ -133,17 +134,51 @@ class AnkiLifecycleTests(unittest.TestCase):
             [action.title for action in menus[0].actions],
             [
                 "Regenerate desktop database",
-                "Import/process existing audio folder...",
+                "Import existing audio collection…",
                 "Build/rebuild fast desktop audio pack",
+                "Move verified loose audio to Trash…",
+                "Restore/verify loose audio originals…",
                 "Show statistics",
             ],
         )
-        self.assertEqual(len(connections), 4)
+        self.assertEqual(len(connections), 6)
         self.assertEqual(hooks, [gui.attempt_init_db_gui])
         gui._active_job = "another operation"
         gui.regenerate_database_operation()
         self.assertEqual(gui._active_job, "another operation")
         gui._finish_job()
+
+        finished = []
+        runtime = types.SimpleNamespace(
+            store=types.SimpleNamespace(info=lambda: {"audioPack": None})
+        )
+        with patch.object(
+            gui, "load_packed_only_state", return_value=None
+        ), patch.object(gui, "get_runtime", return_value=runtime), patch.object(
+            gui, "claim_automatic_pack_build", return_value="fingerprint"
+        ), patch.object(
+            gui,
+            "inspect_installed_collection",
+            return_value={"rows": 10, "source_folders": 2, "database_sources": 2},
+        ), patch.object(
+            gui, "askUser", return_value=False
+        ), patch.object(
+            gui,
+            "finish_automatic_pack_build",
+            side_effect=lambda *args: finished.append(args),
+        ):
+            gui.maybe_automatic_pack_build(confirm_existing=True)
+        self.assertEqual(finished[0][1:], ("fingerprint", "declined"))
+        self.assertIsNone(gui._active_job)
+
+        with patch.object(
+            gui,
+            "load_packed_only_state",
+            return_value={"status": "completed", "version": "0123456789abcdef"},
+        ), patch.object(gui, "_claim_job") as claim:
+            gui.regenerate_database_operation()
+            gui.build_fast_pack_operation()
+        claim.assert_not_called()
 
     def test_user_server_overlay_preserves_sources_and_validates_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

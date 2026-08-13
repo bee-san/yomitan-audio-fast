@@ -313,17 +313,35 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
             if "\x00" in filename:
                 return False
             relative = Path(filename.replace("\\", "/"))
-            if relative.is_absolute():
+            if relative.is_absolute() or any(part == ".." for part in relative.parts):
                 return False
+        except (ValueError, UnicodeError):
+            return False
+        try:
             media_root = source.get_media_dir_path().resolve(strict=True)
             audio_path = (media_root / relative).resolve(strict=True)
             audio_path.relative_to(media_root)
             mime_type = MIME_TYPE_BY_SUFFIX.get(audio_path.suffix.lower())
             if mime_type is None or not audio_path.is_file():
-                return False
+                raise FileNotFoundError(audio_path)
             stat = audio_path.stat()
         except (OSError, ValueError):
-            return False
+            packed = self.runtime.store.packed_target_for_legacy_path(
+                unquote(source_id), filename
+            )
+            if packed is None:
+                return False
+            version, audio_id = packed
+            return self._packed_audio(
+                version,
+                str(audio_id),
+                head_only,
+                cache_control=(
+                    cache_control
+                    if cache_control is not None
+                    else "public, max-age=3600"
+                ),
+            )
         range_header = self.headers.get("Range")
         selected = self._range(range_header, stat.st_size)
         etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'

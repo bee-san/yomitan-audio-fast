@@ -14,7 +14,13 @@ from typing import Callable, Optional
 
 from .config import get_config_path, read_config
 from .db_utils import init_db, update_db_version
-from .fast_pack import build_audio_pack
+from .fast_pack import (
+    BUILD_LOCK_NAME,
+    _PackBuildLock,
+    build_audio_pack,
+    protected_cleanup_state_exists,
+)
+from .fast_pack import PackBuildCancelled, PackProgress
 from .source.audio_source import AudioSourceData
 
 
@@ -28,6 +34,7 @@ REQUIRED_ENTRY_COLUMNS = {
     "file",
 }
 AUTO_MARKER_NAME = "auto-build-v1.json"
+_PROCESS_TOKEN = uuid.uuid4().hex
 SUPPORTED_AUDIO_SUFFIXES = {
     ".mp3",
     ".m4a",
@@ -133,6 +140,48 @@ def validate_entries_database(path: Path, allowed_sources: set[str]) -> dict:
     return {"rows": rows, "sources": sorted(database_sources), "quick_check": check}
 
 
+def inspect_installed_collection(path: Path, sources: dict) -> dict:
+    """Describe the preserved same-ID collection for the one-click prompt."""
+
+    path = path.resolve(strict=True)
+    uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
+    with closing(sqlite3.connect(uri, uri=True)) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(entries)")
+        }
+        if not REQUIRED_ENTRY_COLUMNS.issubset(columns):
+            raise sqlite3.DatabaseError("entries.db does not have the expected schema")
+        rows = int(connection.execute("SELECT COUNT(*) FROM entries").fetchone()[0])
+        if rows <= 0:
+            raise sqlite3.DatabaseError("entries.db contains no audio mappings")
+        database_sources = {
+            row[0] for row in connection.execute("SELECT DISTINCT source FROM entries")
+        }
+    unknown = database_sources - set(sources)
+    if unknown:
+        raise ValueError(
+            "entries.db references unconfigured sources: "
+            + ", ".join(sorted(unknown))
+        )
+    configured_roots = 0
+    for source_id in database_sources:
+        source = sources.get(source_id)
+        if source is not None and source.get_media_dir_path().is_dir():
+            configured_roots += 1
+    if configured_roots != len(database_sources):
+        raise ValueError(
+            "only "
+            f"{configured_roots} of {len(database_sources)} configured source "
+            "folders are available; use Import existing audio collection to "
+            "choose the complete collection"
+        )
+    return {
+        "rows": rows,
+        "database_sources": len(database_sources),
+        "source_folders": configured_roots,
+    }
+
+
 def remap_sources(sources: dict, source_paths: dict[str, Path]) -> dict:
     remapped = {}
     for source_id, source in sources.items():
@@ -180,6 +229,8 @@ def _copy_database_for_publish(
     destination: Path,
     allowed_sources: set[str],
     publisher: Optional[Callable[[Path], None]],
+    progress_callback: Optional[Callable[[PackProgress], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> dict:
     source = source.resolve(strict=True)
     destination = destination.resolve()
@@ -196,13 +247,44 @@ def _copy_database_for_publish(
     temporary = destination.with_name(destination.name + f".import-{uuid.uuid4().hex}")
     before = source.stat()
     try:
-        shutil.copy2(source, temporary)
+        copied = 0
+        with source.open("rb") as source_file, temporary.open("wb") as target_file:
+            while chunk := source_file.read(4 * 1024 * 1024):
+                if should_cancel is not None and should_cancel():
+                    raise PackBuildCancelled(
+                        PackProgress(
+                            "copying-database",
+                            copied,
+                            before.st_size,
+                            "Import paused before publishing entries.db.",
+                        )
+                    )
+                target_file.write(chunk)
+                copied += len(chunk)
+                if progress_callback is not None:
+                    progress_callback(
+                        PackProgress(
+                            "copying-database",
+                            copied,
+                            before.st_size,
+                            f"Copying entries.db: {copied:,}/{before.st_size:,} bytes",
+                        )
+                    )
+            target_file.flush()
+            os.fsync(target_file.fileno())
+        shutil.copystat(source, temporary)
         after = source.stat()
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise RuntimeError("source entries.db changed while it was being copied")
         validation = validate_entries_database(temporary, allowed_sources)
         if publisher is None:
-            os.replace(temporary, destination)
+            inferred_pack_root = destination.parent / "fast_audio"
+            with _PackBuildLock(inferred_pack_root / BUILD_LOCK_NAME):
+                if protected_cleanup_state_exists(inferred_pack_root):
+                    raise RuntimeError(
+                        "database import became blocked before publication"
+                    )
+                os.replace(temporary, destination)
         else:
             publisher(temporary)
         validation["mode"] = "copied"
@@ -220,16 +302,33 @@ def process_existing_collection(
     db_path: Path,
     pack_root: Path,
     callback: Optional[Callable[[str], None]] = None,
+    progress_callback: Optional[Callable[[PackProgress], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
     publisher: Optional[Callable[[Path], None]] = None,
     replace_sources: Optional[Callable[[dict], None]] = None,
     reload_pack: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Import metadata by copy, never audio, then build and atomically publish a pack."""
 
+    from .cleanup import load_packed_only_state
+
+    if protected_cleanup_state_exists(pack_root):
+        raise RuntimeError(
+            "import is blocked while this collection is packed-only. Restore the "
+            "original source audio to its configured folders first; a future "
+            "recovery action must verify the full replacement before publication."
+        )
+
+    def check_cancel(stage: str, message: str) -> None:
+        if should_cancel is not None and should_cancel():
+            raise PackBuildCancelled(PackProgress(stage, 0, 0, message))
+
+    check_cancel("discovering", "Import paused before collection discovery.")
     discovery = discover_existing_collection(selected, sources)
     if callback is not None:
         callback("Validated selected collection; preserving all original files.")
     migrated_sources = remap_sources(sources, discovery.source_paths)
+    check_cancel("validating-database", "Import paused before database validation.")
     if discovery.database is not None:
         validate_entries_database(discovery.database, set(migrated_sources))
 
@@ -241,30 +340,61 @@ def process_existing_collection(
             db_path,
             set(migrated_sources),
             publisher,
+            progress_callback,
+            should_cancel,
         )
         update_db_version()
     else:
         if callback is not None:
             callback("No entries.db found; regenerating metadata from source folders...")
-        init_db(callback=callback, publisher=publisher, sources=migrated_sources)
+        try:
+            init_db(
+                callback=callback,
+                publisher=publisher,
+                sources=migrated_sources,
+                should_cancel=should_cancel,
+            )
+        except InterruptedError as error:
+            raise PackBuildCancelled(
+                PackProgress(
+                    "generating-database",
+                    0,
+                    0,
+                    "Import paused before publishing generated metadata.",
+                )
+            ) from error
         database_result = {"mode": "regenerated"}
 
     # Commit source configuration only after the database publication succeeds.
     # If packing subsequently fails, every layer consistently serves the new
     # collection through secure loose-file fallback and a manual retry is safe.
-    persist_source_paths(discovery.source_paths)
-    if replace_sources is not None:
-        replace_sources(migrated_sources)
-    sources.clear()
-    sources.update(migrated_sources)
+    with _PackBuildLock(pack_root / BUILD_LOCK_NAME):
+        if protected_cleanup_state_exists(pack_root):
+            raise RuntimeError(
+                "import became blocked before source configuration publication"
+            )
+        persist_source_paths(discovery.source_paths)
+        if replace_sources is not None:
+            replace_sources(migrated_sources)
+        sources.clear()
+        sources.update(migrated_sources)
 
+    check_cancel(
+        "packing",
+        "Import paused safely. The imported database can serve loose audio on restart.",
+    )
     if callback is not None:
         callback("Building the immutable fast desktop audio pack...")
+    pack_options = {"callback": callback}
+    if progress_callback is not None:
+        pack_options["progress_callback"] = progress_callback
+    if should_cancel is not None:
+        pack_options["should_cancel"] = should_cancel
     pack_result = build_audio_pack(
         db_path,
         pack_root,
         migrated_sources,
-        callback=callback,
+        **pack_options,
     )
     if reload_pack is not None:
         reload_pack()
@@ -356,13 +486,35 @@ def claim_automatic_pack_build(
         previous = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError):
         previous = {}
+    if previous.get("fingerprint") == fingerprint:
+        if previous.get("status") in ("failed", "declined"):
+            return None
+        if (
+            previous.get("status") == "started"
+            and previous.get("owner") == _PROCESS_TOKEN
+        ):
+            return None
+    value = {"fingerprint": fingerprint, "status": "started", "owner": _PROCESS_TOKEN}
     if (
         previous.get("fingerprint") == fingerprint
-        and previous.get("status") in ("started", "failed")
+        and previous.get("status") in ("started", "paused")
     ):
-        return None
-    _atomic_json(marker, {"fingerprint": fingerprint, "status": "started"})
+        value["resumed_from"] = previous["status"]
+    _atomic_json(marker, value)
     return fingerprint
+
+
+def automatic_pack_build_state(pack_root: Path, fingerprint: str) -> Optional[str]:
+    try:
+        marker = json.loads(
+            (pack_root / AUTO_MARKER_NAME).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if marker.get("fingerprint") != fingerprint:
+        return None
+    status = marker.get("resumed_from")
+    return status if isinstance(status, str) else None
 
 
 def finish_automatic_pack_build(

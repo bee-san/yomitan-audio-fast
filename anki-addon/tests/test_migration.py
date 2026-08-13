@@ -103,7 +103,7 @@ class MigrationTests(unittest.TestCase):
         def publisher(temporary: Path) -> None:
             os.replace(temporary, destination_db)
 
-        def fake_pack(db_path, pack_root, sources, callback=None):
+        def fake_pack(db_path, pack_root, sources, callback=None, **_options):
             self.assertEqual(db_path, destination_db)
             self.assertEqual(
                 sources["s1"].get_media_dir_path(), self.external_source.resolve()
@@ -150,6 +150,102 @@ class MigrationTests(unittest.TestCase):
             persisted["sources"][0]["path"], str(self.external_source.resolve())
         )
 
+    def test_cancel_during_database_copy_publishes_nothing(self) -> None:
+        destination_db = self.installed_user / "entries.db"
+        with self.assertRaises(migration.PackBuildCancelled):
+            migration._copy_database_for_publish(
+                self.external_db,
+                destination_db,
+                {"s1"},
+                None,
+                should_cancel=lambda: True,
+            )
+        self.assertFalse(destination_db.exists())
+        self.assertEqual(
+            list(destination_db.parent.glob("entries.db.import-*")), []
+        )
+
+    def test_cancel_after_database_publish_commits_source_roots_before_pausing(self) -> None:
+        destination_db = self.installed_user / "entries.db"
+        config_path = self.installed_user / "config.json"
+        cancel = {"requested": False}
+
+        def publisher(temporary: Path) -> None:
+            os.replace(temporary, destination_db)
+            cancel["requested"] = True
+
+        merged_config = {
+            "sources": [
+                {
+                    "type": "jpod",
+                    "id": "s1",
+                    "path": "user_files/s1_files",
+                    "display": "Source",
+                }
+            ]
+        }
+        with patch.object(migration, "get_config_path", return_value=config_path), patch.object(
+            migration, "read_config", return_value=merged_config
+        ), patch.object(migration, "update_db_version"):
+            with self.assertRaises(migration.PackBuildCancelled):
+                migration.process_existing_collection(
+                    self.external,
+                    self.sources,
+                    destination_db,
+                    self.installed_user / "fast_audio",
+                    publisher=publisher,
+                    should_cancel=lambda: cancel["requested"],
+                )
+
+        self.assertTrue(destination_db.is_file())
+        expected = self.external_source.resolve()
+        self.assertEqual(self.sources["s1"].get_media_dir_path(), expected)
+        persisted = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(persisted["sources"][0]["path"], str(expected))
+
+    def test_cleanup_state_cannot_race_source_config_publication(self) -> None:
+        destination_db = self.installed_user / "entries.db"
+        config_path = self.installed_user / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "sources": [
+                        {
+                            "type": "jpod",
+                            "id": "s1",
+                            "path": "user_files/s1_files",
+                            "display": "Source",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        pack_root = self.installed_user / "fast_audio"
+
+        def publisher(temporary: Path) -> None:
+            os.replace(temporary, destination_db)
+            pack_root.mkdir(parents=True, exist_ok=True)
+            (pack_root / "packed-only-v1.json").write_text("{}", encoding="utf-8")
+
+        before_sources = dict(self.sources)
+        with patch.object(migration, "get_config_path", return_value=config_path), patch.object(
+            migration,
+            "read_config",
+            return_value=json.loads(config_path.read_text(encoding="utf-8")),
+        ), patch.object(migration, "update_db_version"):
+            with self.assertRaisesRegex(RuntimeError, "source configuration"):
+                migration.process_existing_collection(
+                    self.external,
+                    self.sources,
+                    destination_db,
+                    pack_root,
+                    publisher=publisher,
+                )
+        self.assertEqual(self.sources, before_sources)
+        persisted = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(persisted["sources"][0]["path"], "user_files/s1_files")
+
     def test_invalid_unknown_database_source_is_rejected_before_config_write(self) -> None:
         unknown_db = self.external_user / "unknown.db"
         self._database(unknown_db, "unknown")
@@ -183,6 +279,61 @@ class MigrationTests(unittest.TestCase):
         self.assertIsNone(
             migration.claim_automatic_pack_build(
                 self.external_db, pack_root, auto_sources, pack_is_active=True
+            )
+        )
+
+    def test_interrupted_or_paused_automatic_build_is_claimed_after_restart(self) -> None:
+        pack_root = self.installed_user / "fast_audio"
+        auto_sources = migration.remap_sources(
+            self.sources, {"s1": self.external_source}
+        )
+        fingerprint = migration.claim_automatic_pack_build(
+            self.external_db, pack_root, auto_sources, pack_is_active=False
+        )
+        self.assertIsNotNone(fingerprint)
+        assert fingerprint is not None
+        self.assertIsNone(
+            migration.automatic_pack_build_state(pack_root, fingerprint)
+        )
+        with patch.object(migration, "_PROCESS_TOKEN", "next-anki-process"):
+            self.assertEqual(
+                migration.claim_automatic_pack_build(
+                    self.external_db, pack_root, auto_sources, pack_is_active=False
+                ),
+                fingerprint,
+            )
+            self.assertEqual(
+                migration.automatic_pack_build_state(pack_root, fingerprint),
+                "started",
+            )
+            migration.finish_automatic_pack_build(pack_root, fingerprint, "paused")
+            self.assertEqual(
+                migration.claim_automatic_pack_build(
+                    self.external_db, pack_root, auto_sources, pack_is_active=False
+                ),
+                fingerprint,
+            )
+            migration.finish_automatic_pack_build(pack_root, fingerprint, "failed")
+            self.assertIsNone(
+                migration.claim_automatic_pack_build(
+                    self.external_db, pack_root, auto_sources, pack_is_active=False
+                )
+            )
+
+    def test_declined_automatic_build_is_not_offered_again_for_same_collection(self) -> None:
+        pack_root = self.installed_user / "declined-pack"
+        auto_sources = migration.remap_sources(
+            self.sources, {"s1": self.external_source}
+        )
+        fingerprint = migration.claim_automatic_pack_build(
+            self.external_db, pack_root, auto_sources, pack_is_active=False
+        )
+        self.assertIsNotNone(fingerprint)
+        assert fingerprint is not None
+        migration.finish_automatic_pack_build(pack_root, fingerprint, "declined")
+        self.assertIsNone(
+            migration.claim_automatic_pack_build(
+                self.external_db, pack_root, auto_sources, pack_is_active=False
             )
         )
 

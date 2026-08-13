@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'local-audio-fast-anki-addon-code-only.zip'
+    $OutputPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'local-audio-fast.ankiaddon'
 }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -15,14 +15,18 @@ $rootFiles = @(
     'build-code-only-package.ps1',
     'config.py',
     'consts.py',
+    'cleanup.py',
     'db_utils.py',
     'default_config.json',
     'fast_pack.py',
     'fast_store.py',
     'gui.py',
+    'import_dialog.py',
     'jp_util.py',
+    'manifest.json',
     'migration.py',
     'meta.json',
+    'progress_ui.py',
     'README.md',
     'server.py',
     'standalone.py',

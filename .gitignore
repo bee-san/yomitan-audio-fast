@@ -13,7 +13,7 @@
 **/*.exe
 **/*.dll
 **/*.log
+**/*.ankiaddon
 **/__pycache__/
 **/*.py[cod]
 **/.building-*/
-
