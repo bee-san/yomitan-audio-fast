@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from typing import Callable, Optional
 
 from .audio_source import AudioSource
 from ..jp_util import split_into_mora, is_kana, katakana_to_hiragana
@@ -87,7 +88,11 @@ class NHK16AudioSource(AudioSource):
         )
         return display_text
 
-    def add_entries(self, conn: sqlite3.Connection):
+    def add_entries(
+        self,
+        conn: sqlite3.Connection,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ):
         media_path = self.get_media_dir_path()
         entries_file = media_path.joinpath("entries.json")
 
@@ -109,6 +114,8 @@ class NHK16AudioSource(AudioSource):
                 batch.clear()
 
         for entry in entries:
+            if should_cancel is not None and should_cancel():
+                raise InterruptedError("database generation cancelled")
             reading = entry["kana"]
             expression_list = self.parse_headwords(entry["kanji"], "，")
 

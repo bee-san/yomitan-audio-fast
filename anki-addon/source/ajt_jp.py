@@ -2,7 +2,7 @@ from __future__ import annotations  # for Python 3.7-3.9
 
 import json
 import sqlite3
-from typing import Optional, Final, TypedDict
+from typing import Callable, Optional, Final, TypedDict
 # THIS REQUIRES A PIP INSTALL, making it impossible to use in Anki...
 #from typing_extensions import NotRequired
 
@@ -78,7 +78,11 @@ class AJTJapaneseSource(AudioSource):
             mora_list.insert(pitch_accent, "＼")
         return "".join(mora_list) + f" [{pitch_accent}]"
 
-    def add_entries(self, connection: sqlite3.Connection):
+    def add_entries(
+        self,
+        connection: sqlite3.Connection,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ):
         cur = connection.cursor()
         batch = []
         index_file = self.get_media_dir_path().joinpath("index.json")
@@ -93,6 +97,8 @@ class AJTJapaneseSource(AudioSource):
             files = entries["files"]
 
             for expression, word_files in entries["headwords"].items():
+                if should_cancel is not None and should_cancel():
+                    raise InterruptedError("database generation cancelled")
                 for word_file in word_files:
                     fullpath = self.get_media_dir_path().joinpath("media").joinpath(word_file)
                     relpath = fullpath.relative_to(self.get_media_dir_path())

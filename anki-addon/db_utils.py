@@ -170,6 +170,7 @@ def backfill_jmdict_forms_rows(
 def fill_jmdict_forms(
     connection: sqlite3.Connection,
     callback: Optional[Callable[[str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> int:
     forms_path = get_program_root_path() / JMDICT_FORMS_JSON_FILE_NAME
     if not forms_path.is_file():
@@ -178,6 +179,8 @@ def fill_jmdict_forms(
     new_rows: list[tuple] = []
     new_rows_set: set[tuple] = set()
     for index, group in enumerate(groups):
+        if should_cancel is not None and should_cancel():
+            raise InterruptedError("database generation cancelled")
         backfill_jmdict_forms_rows(connection, group, new_rows, new_rows_set)
         if callback is not None and index and index % 20000 == 0:
             callback(f"JMdict forms: {index:,}/{len(groups):,} groups")
@@ -206,6 +209,7 @@ def init_db(
     callback: Optional[Callable[[str], None]] = None,
     publisher: Optional[Callable[[Path], None]] = None,
     sources: Optional[dict] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> None:
     """Build off to the side with deferred indexes, verify, then publish atomically."""
 
@@ -222,9 +226,16 @@ def init_db(
             _initialize_schema(connection)
             source_map = sources if sources is not None else ALL_SOURCES
             for source in source_map.values():
+                if should_cancel is not None and should_cancel():
+                    raise InterruptedError("database generation cancelled")
                 if callback is not None:
                     callback(f"Adding entries from {source.data.id}...")
-                source.add_entries(connection)
+                if should_cancel is None:
+                    source.add_entries(connection)
+                else:
+                    source.add_entries(connection, should_cancel=should_cancel)
+                if should_cancel is not None and should_cancel():
+                    raise InterruptedError("database generation cancelled")
             if callback is not None:
                 callback("Building the expression/reading index...")
             connection.execute(
@@ -233,7 +244,7 @@ def init_db(
             connection.commit()
             if callback is not None:
                 callback("Backfilling entries using JMdict forms...")
-            fill_jmdict_forms(connection, callback)
+            fill_jmdict_forms(connection, callback, should_cancel)
             connection.execute("ANALYZE")
             connection.execute("PRAGMA optimize")
             connection.commit()

@@ -1,11 +1,16 @@
 import sqlite3
+from typing import Callable, Optional
 
 from .audio_source import AudioSource
 from ..jp_util import is_kana
 
 
 class JPodAudioSource(AudioSource):
-    def add_entries(self, connection: sqlite3.Connection):
+    def add_entries(
+        self,
+        connection: sqlite3.Connection,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ):
         cur = connection.cursor()
         batch = []
         sql = f"""
@@ -16,6 +21,8 @@ class JPodAudioSource(AudioSource):
             """
 
         for path in self.find_media_files():
+            if should_cancel is not None and should_cancel():
+                raise InterruptedError("database generation cancelled")
             relative_path = str(path.relative_to(self.get_media_dir_path()))
             basename_noext = path.stem
             parts = basename_noext.split(" - ")

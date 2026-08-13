@@ -3,7 +3,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Callable, Final, Optional
 
 from urllib.parse import urlunparse
 
@@ -29,7 +29,11 @@ class AudioSource(ABC):
         self.data = data
 
     @abstractmethod
-    def add_entries(self, connection: sqlite3.Connection):
+    def add_entries(
+        self,
+        connection: sqlite3.Connection,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ):
         """
         add entries to the `entries` table
         """

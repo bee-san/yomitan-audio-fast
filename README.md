@@ -58,34 +58,38 @@ No audio, database, generated pack, executable, or private bundle is committed t
 
 ### Existing Local Audio Server user — recommended
 
-This is a same-ID code replacement for add-on `1045800357`. Your existing data is reused only when `user_files` stays inside that directory.
+This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon` tells Anki to replace the old code while preserving its `user_files` automatically.
 
-1. Close Anki.
-2. Clone or download this repository.
-3. Copy the contents of [`anki-addon/`](anki-addon/) into:
+1. Download [`local-audio-fast.ankiaddon`](https://github.com/bee-san/yomitan-audio-fast/releases/latest/download/local-audio-fast.ankiaddon), or build it from a checkout:
 
-   ```text
-   %APPDATA%\Anki2\addons21\1045800357
+   ```powershell
+   .\anki-addon\build-code-only-package.ps1
    ```
 
-4. **Do not delete or replace `user_files`.** It contains your database and audio collection.
-5. Start Anki.
+2. In Anki, open **Tools → Add-ons → Install from file…** and choose it.
+3. Restart Anki. Your existing database and audio are retained.
 
-PowerShell from a repository checkout:
+You can also use **Tools → Local Audio Server → Import existing audio collection…** and drop an old add-on folder, `user_files`, collection root, or recognized source folder onto the window. Browse uses the exact same validated path. Original files are never moved or deleted.
+
+For development, a manual same-ID overlay still works:
 
 ```powershell
 $addon = Join-Path $env:APPDATA 'Anki2\addons21\1045800357'
 Copy-Item .\anki-addon\* $addon -Recurse -Force
 ```
 
+Keep the existing `user_files` when using the manual method.
+
 If the add-on finds a valid database and referenced audio but no valid pack, it schedules one background acceleration build for that data fingerprint. You can also choose:
 
-**Tools → Local Audio Server → Import/process existing audio folder…**
+**Tools → Local Audio Server → Import existing audio collection…**
 
 The picker accepts an old add-on root, its `user_files` directory, a collection root, or one recognized source folder. It validates the database, remaps sources, and never moves or deletes the original audio.
 
 > [!IMPORTANT]
 > The first pack build is a one-time local job and can take minutes on a very large collection. The measured pack was 1.60 GiB. Loose originals remain available as a safe fallback, so allow roughly the referenced audio size in free space unless you import the already-verified Rust pack as an NTFS hardlink.
+
+The build window shows exact row progress and a **Cancel** button. A cancellation checkpoints the completed pack/index data without changing the active pack. Opening the action again—or restarting Anki after an interrupted automatic build—resumes from that checkpoint without rereading audio that is already packed. Source metadata is rechecked before publication, so changed files trigger a clean rebuild instead of a mixed pack.
 
 Tested end to end on Windows 11 with Anki 25.09.5 / CPython 3.13.5. Other desktop platforms are not yet part of the release evidence. Android and `android.db` are deliberately out of scope.
 
@@ -227,11 +231,11 @@ The exact local data layout is documented in [DATA-LAYOUT.md](DATA-LAYOUT.md).
 
 ### The first build is taking a long time
 
-That job reads and validates each referenced recording once. Keep Anki open and avoid running two pack builds at the same time. Subsequent server starts open the immutable manifest/index instead of rescanning the collection.
+That job reads and validates each referenced recording once. Its progress window shows processed rows, unique blobs, and missing files. You can cancel safely; run the action again or restart Anki to resume. Subsequent server starts open the immutable manifest/index instead of rescanning the collection.
 
 ### I already have audio somewhere else
 
-Use **Tools → Local Audio Server → Import/process existing audio folder…**. The importer accepts several common folder levels, validates `entries.db`, and leaves original audio in place.
+Use **Tools → Local Audio Server → Import existing audio collection…**. Drop or browse to the folder. The importer accepts several common folder levels, validates `entries.db`, and leaves original audio in place.
 
 ## Repository map
 

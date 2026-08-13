@@ -4,10 +4,11 @@ Desktop-only, same-ID replacement for the Yomitan Local Audio Server add-on. It 
 
 ## Install over an existing collection
 
-1. Close Anki.
-2. Copy this directory's contents over `%APPDATA%\Anki2\addons21\1045800357`.
-3. Keep the existing `user_files` directory. Do not replace or delete it.
-4. Start Anki.
+1. Build or download `local-audio-fast.ankiaddon`.
+2. In Anki, choose **Tools → Add-ons → Install from file…**.
+3. Select the package and restart Anki.
+
+The package uses the original add-on ID (`1045800357`), so Anki replaces the old code and preserves its `user_files` for you.
 
 The server binds to `127.0.0.1:5050` by default. Configure a Yomitan Custom JSON source with:
 
@@ -20,11 +21,11 @@ http://127.0.0.1:5050/?term={term}&reading={reading}
 **Tools → Local Audio Server** contains:
 
 - **Regenerate desktop database** — rebuild metadata from the configured source adapters.
-- **Import/process existing audio folder…** — select an old add-on root, `user_files`, collection root, or recognized source folder; validate and adopt it without moving original audio.
+- **Import existing audio collection…** — drop or browse to an old add-on root, `user_files`, collection root, or recognized source folder; validate and adopt it without moving original audio.
 - **Build/rebuild fast desktop audio pack** — create the fixed row index and immutable pack locally.
 - **Show statistics** — show database, active pack, and source status.
 
-Only one import/regeneration/pack job runs at a time. Database and pack publication are atomic; active requests retain a safe lease on the version they started with.
+Only one import/regeneration/pack job runs at a time. Pack work has determinate progress and a visible Cancel button. Completed work is checkpointed every few seconds; a retry or later Anki start resumes it. Database and pack publication are atomic, and active requests retain a safe lease on the version they started with.
 
 ## Pack layout
 
@@ -78,12 +79,12 @@ Build a Python pack without serving:
 
 The optional Rust-bundle importer verifies a SHA-256 integrity sidecar, database identity, every record bound, source/path ordering, and the final NTFS hardlink before activation.
 
-## Build a code-only ZIP
+## Build the installable add-on
 
 From this directory:
 
 ```powershell
-.\build-code-only-package.ps1 -OutputPath ..\local-audio-fast-anki-addon-code-only.zip
+.\build-code-only-package.ps1 -OutputPath ..\local-audio-fast.ankiaddon
 ```
 
 The package deliberately excludes `user_files`, databases, audio, packs, caches, and bytecode.

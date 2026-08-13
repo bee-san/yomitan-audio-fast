@@ -133,7 +133,7 @@ class AnkiLifecycleTests(unittest.TestCase):
             [action.title for action in menus[0].actions],
             [
                 "Regenerate desktop database",
-                "Import/process existing audio folder...",
+                "Import existing audio collection…",
                 "Build/rebuild fast desktop audio pack",
                 "Show statistics",
             ],

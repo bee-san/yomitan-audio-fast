@@ -10,7 +10,7 @@ from typing import Optional
 
 from aqt import gui_hooks, mw
 from aqt.operations import QueryOp
-from aqt.qt import QAction, QFileDialog, qconnect
+from aqt.qt import QAction, qconnect
 from aqt.utils import showInfo, showWarning
 
 from .config import ALL_SOURCES
@@ -22,11 +22,13 @@ from .db_utils import (
     table_exists_and_has_data,
     table_must_be_updated,
 )
-from .fast_pack import build_audio_pack
+from .fast_pack import PackBuildCancelled, build_audio_pack
 from .migration import (
     claim_automatic_pack_build,
+    discover_existing_collection,
     finish_automatic_pack_build,
     process_existing_collection,
+    validate_entries_database,
 )
 from .server import get_runtime
 from .util import get_db_path, get_program_root_path
@@ -57,6 +59,26 @@ def _finish_job() -> None:
 def _operation_failure(error: Exception) -> None:
     _finish_job()
     showWarning(f"Local Audio Server operation failed:\n\n{error}")
+
+
+def _pack_operation_failure(error: Exception, progress) -> None:
+    try:
+        progress.close()
+    finally:
+        _finish_job()
+    if isinstance(error, PackBuildCancelled):
+        completed = error.progress.current
+        total = error.progress.total
+        position = ""
+        if total:
+            position = f" ({completed / total:.0%})"
+        showInfo(
+            f"{error.progress.message}{position}\n\n"
+            "Open the build/import action again—or restart Anki—to continue "
+            "from the saved checkpoint. The current audio server remains usable."
+        )
+    else:
+        showWarning(f"Local Audio Server operation failed:\n\n{error}")
 
 
 def _with_failure(operation, callback=_operation_failure):
@@ -119,32 +141,45 @@ def regenerate_database_success(started: float) -> None:
 def build_fast_pack_operation() -> None:
     if not _claim_job("building or importing audio"):
         return
+    from .progress_ui import OperationProgress
+
+    progress = OperationProgress(
+        "Local Audio Server",
+        "Preparing the fast desktop audio pack…",
+    )
     started = time.perf_counter()
     operation = QueryOp(
         parent=mw,
-        op=lambda _: build_fast_pack_action(),
-        success=lambda result: _build_fast_pack_finished(started, result),
+        op=lambda _: build_fast_pack_action(progress),
+        success=lambda result: _build_fast_pack_finished(started, result, progress),
     )
-    operation = _with_failure(operation)
-    operation.with_progress(
-        "Building the fast desktop audio pack.\nOriginal audio files are left intact."
-    ).run_in_background()
+    operation = _with_failure(
+        operation, lambda error: _pack_operation_failure(error, progress)
+    )
+    operation.run_in_background()
 
 
-def _build_fast_pack_finished(started: float, result: dict) -> None:
-    _finish_job()
+def _build_fast_pack_finished(started: float, result: dict, progress=None) -> None:
+    try:
+        if progress is not None:
+            progress.close()
+    finally:
+        _finish_job()
     build_fast_pack_success(started, result)
 
 
-def build_fast_pack_action() -> dict:
-    def callback(message: str) -> None:
-        mw.taskman.run_on_main(lambda: mw.progress.update(label=message))
-
+def build_fast_pack_action(progress=None) -> dict:
     result = build_audio_pack(
         get_db_path(),
         get_program_root_path() / "user_files" / "fast_audio",
         ALL_SOURCES,
-        callback=callback,
+        callback=None if progress is not None else (
+            lambda message: mw.taskman.run_on_main(
+                lambda: mw.progress.update(label=message)
+            )
+        ),
+        progress_callback=progress.emit_progress if progress is not None else None,
+        should_cancel=progress.cancelled if progress is not None else None,
     )
     runtime = get_runtime()
     if runtime is not None:
@@ -192,45 +227,73 @@ def maybe_automatic_pack_build() -> None:
         return
 
     started = time.perf_counter()
+    from .progress_ui import OperationProgress
+
+    progress = OperationProgress(
+        "Local Audio Server",
+        "Accelerating the existing audio collection…",
+    )
 
     def success(result: dict) -> None:
-        finish_automatic_pack_build(pack_root, fingerprint, "completed")
-        _finish_job()
+        try:
+            finish_automatic_pack_build(pack_root, fingerprint, "completed")
+        finally:
+            progress.close()
+            _finish_job()
         build_fast_pack_success(started, result)
 
     def failure(error: Exception) -> None:
-        finish_automatic_pack_build(pack_root, fingerprint, "failed", str(error))
-        _operation_failure(error)
+        status = "paused" if isinstance(error, PackBuildCancelled) else "failed"
+        try:
+            finish_automatic_pack_build(pack_root, fingerprint, status, str(error))
+        finally:
+            _pack_operation_failure(error, progress)
 
-    operation = QueryOp(parent=mw, op=lambda _: build_fast_pack_action(), success=success)
+    operation = QueryOp(
+        parent=mw,
+        op=lambda _: build_fast_pack_action(progress),
+        success=success,
+    )
     operation = _with_failure(operation, failure)
-    operation.with_progress(
-        "Accelerating the existing Local Audio Server collection.\n"
-        "This runs once; original audio files remain untouched."
-    ).run_in_background()
+    operation.run_in_background()
 
 
 def import_existing_audio_operation() -> None:
-    selected = QFileDialog.getExistingDirectory(
-        mw,
-        "Import/process existing Local Audio Server folder",
-        str(get_program_root_path()),
+    from .import_dialog import choose_existing_audio_directory
+
+    def validate_selected(path: Path) -> None:
+        discovery = discover_existing_collection(path, ALL_SOURCES)
+        if discovery.database is not None:
+            try:
+                validate_entries_database(discovery.database, set(ALL_SOURCES))
+            except sqlite3.DatabaseError as error:
+                raise ValueError(str(error)) from error
+
+    selected = choose_existing_audio_directory(
+        mw, get_program_root_path(), validate_selected
     )
-    if not selected or not _claim_job("building or importing audio"):
+    if selected is None:
         return
+    if not _claim_job("building or importing audio"):
+        return
+    from .progress_ui import OperationProgress
+
+    progress = OperationProgress(
+        "Import existing audio collection",
+        "Validating the dropped audio collection…",
+    )
     started = time.perf_counter()
 
     def action() -> dict:
-        def callback(message: str) -> None:
-            mw.taskman.run_on_main(lambda: mw.progress.update(label=message))
-
         runtime = get_runtime()
         return process_existing_collection(
             Path(selected),
             ALL_SOURCES,
             get_db_path(),
             get_program_root_path() / "user_files" / "fast_audio",
-            callback=callback,
+            callback=progress.emit_message,
+            progress_callback=progress.emit_progress,
+            should_cancel=progress.cancelled,
             publisher=runtime.store.publish_database if runtime is not None else None,
             replace_sources=runtime.store.replace_sources if runtime is not None else None,
             reload_pack=runtime.store.reload_pack if runtime is not None else None,
@@ -240,7 +303,10 @@ def import_existing_audio_operation() -> None:
         migrated_sources = result.pop("_sources")
         ALL_SOURCES.clear()
         ALL_SOURCES.update(migrated_sources)
-        _finish_job()
+        try:
+            progress.close()
+        finally:
+            _finish_job()
         pack = result["pack"]
         elapsed = time.perf_counter() - started
         showInfo(
@@ -253,11 +319,10 @@ def import_existing_audio_operation() -> None:
         )
 
     operation = QueryOp(parent=mw, op=lambda _: action(), success=success)
-    operation = _with_failure(operation)
-    operation.with_progress(
-        "Importing existing audio metadata and building the fast pack.\n"
-        "Original files will not be moved or deleted."
-    ).run_in_background()
+    operation = _with_failure(
+        operation, lambda error: _pack_operation_failure(error, progress)
+    )
+    operation.run_in_background()
 
 
 def show_stats() -> None:
@@ -288,7 +353,7 @@ def init_gui() -> None:
     regenerate = QAction("Regenerate desktop database", mw)
     qconnect(regenerate.triggered, regenerate_database_operation)
     menu.addAction(regenerate)
-    import_existing = QAction("Import/process existing audio folder...", mw)
+    import_existing = QAction("Import existing audio collection…", mw)
     qconnect(import_existing.triggered, import_existing_audio_operation)
     menu.addAction(import_existing)
     build_pack = QAction("Build/rebuild fast desktop audio pack", mw)
