@@ -78,15 +78,26 @@ def walk_media_files(media_dir: Path) -> dict:
     return files
 
 
-def resolve_media_file(files: dict, word_file: str) -> Optional[Path]:
+def lowercase_media_files(files: dict) -> dict:
+    """case-folded view of the walk; first entry wins if two names differ only in case"""
+    lowered = {}
+    for key, path in files.items():
+        lowered.setdefault(key.lower(), path)
+    return lowered
+
+
+def resolve_media_file(files: dict, lowered: dict, word_file: str) -> Optional[Path]:
     key = PurePosixPath(word_file.replace("\\", "/")).as_posix()
-    path = files.get(key)
-    if path is not None:
-        return path
     # some datasets ship a different container than the index names
     stem = key[: len(key) - len(PurePosixPath(key).suffix)]
-    for extension in EXTENSION_PREFERENCE:
-        path = files.get(stem + extension)
+    candidates = (key, *(stem + extension for extension in EXTENSION_PREFERENCE))
+    for candidate in candidates:
+        path = files.get(candidate)
+        if path is not None:
+            return path
+    # the previous per-headword is_file() probe matched case-insensitively on Windows
+    for candidate in candidates:
+        path = lowered.get(candidate.lower())
         if path is not None:
             return path
     return None
@@ -98,8 +109,11 @@ class AJTJapaneseSource(AudioSource):
         root = self.get_media_dir_path()
         meta = index.get("meta") or {}
         name = meta.get("media_dir") if isinstance(meta, dict) else None
-        if isinstance(name, str) and name and root.joinpath(name).is_dir():
-            return name
+        if isinstance(name, str) and name:
+            candidate = root.joinpath(name)
+            # an index must not be able to move the media dir outside its own source
+            if candidate.is_dir() and candidate.resolve().is_relative_to(root.resolve()):
+                return name
         for candidate in ("media", "audio"):
             if root.joinpath(candidate).is_dir():
                 return candidate
@@ -147,12 +161,13 @@ class AJTJapaneseSource(AudioSource):
             files = entries["files"]
             media_dir = self.get_media_dir_path().joinpath(self.get_media_dir_name(entries))
             on_disk = walk_media_files(media_dir)
+            on_disk_lowered = lowercase_media_files(on_disk)
 
             for expression, word_files in entries["headwords"].items():
                 if should_cancel is not None and should_cancel():
                     raise InterruptedError("database generation cancelled")
                 for word_file in word_files:
-                    fullpath = resolve_media_file(on_disk, word_file)
+                    fullpath = resolve_media_file(on_disk, on_disk_lowered, word_file)
                     if fullpath is None:
                         continue
                     relpath = fullpath.relative_to(self.get_media_dir_path())

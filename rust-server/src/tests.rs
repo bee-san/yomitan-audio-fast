@@ -153,6 +153,85 @@ fn filtering_order_and_expression_alias_semantics_are_retained() -> Result<()> {
 }
 
 #[test]
+fn pinned_user_sources_keep_their_paths_and_gain_new_defaults() -> Result<()> {
+    let temp = TempDir::new()?;
+    let addon = temp.path().join("addon");
+    let moved = addon.join("user_files").join("alpha_moved");
+    let media_b = addon.join("user_files").join("beta");
+    fs::create_dir_all(&moved)?;
+    fs::create_dir_all(&media_b)?;
+    fs::write(
+        addon.join("default_config.json"),
+        r#"{
+          "sources": [
+            {"type":"jpod","id":"alpha","path":"user_files/alpha","display":"Alpha %s"},
+            {"type":"forvo","id":"beta","path":"user_files/beta","display":"Beta (%s)"}
+          ]
+        }"#,
+    )?;
+    // a config written before "beta" existed: the pinned path wins, the default is appended
+    fs::write(
+        addon.join("user_files").join("config.json"),
+        r#"{
+          "sources": [
+            {"type":"jpod","id":"alpha","path":"user_files/alpha_moved","display":"Alpha %s"}
+          ]
+        }"#,
+    )?;
+    fs::write(moved.join("a.mp3"), b"ID3\x04\x00\x00moved-alpha-audio")?;
+    fs::write(media_b.join("b.mp3"), b"ID3\x04\x00\x00default-beta-audio")?;
+    let db = Connection::open(addon.join("user_files").join("entries.db"))?;
+    db.execute_batch(
+        "CREATE TABLE entries (
+            id INTEGER PRIMARY KEY NOT NULL,
+            expression TEXT NOT NULL,
+            reading TEXT,
+            source TEXT NOT NULL,
+            speaker TEXT,
+            display TEXT,
+            file TEXT NOT NULL
+         );
+         CREATE INDEX idx_expression ON entries(expression);",
+    )?;
+    for row in [("alpha", "a.mp3"), ("beta", "b.mp3")] {
+        db.execute(
+            "INSERT INTO entries(expression,reading,source,speaker,display,file)
+             VALUES ('読む',NULL,?1,NULL,NULL,?2)",
+            row,
+        )?;
+    }
+    drop(db);
+    let root = temp.path().join("bundle");
+    compile(&CompileOptions {
+        addon_root: addon.clone(),
+        output: root.clone(),
+        deduplicate: true,
+        pack_workers: 2,
+    })?;
+    let bundle = Arc::new(Bundle::open(&root, true)?);
+    let engine = QueryEngine::new(bundle.clone(), LookupMode::Mph)?;
+    let candidates = engine.candidates(&QueryInput {
+        term: "読む".to_owned(),
+        reading: None,
+        sources: None,
+        users: Vec::new(),
+    })?;
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|item| item.source)
+            .collect::<Vec<_>>(),
+        vec!["alpha", "beta"]
+    );
+    let audio = bundle.audio(candidates[0].audio_id as usize)?;
+    assert_eq!(
+        bundle.audio_bytes(audio, 0, audio.length)?.as_ref(),
+        b"ID3\x04\x00\x00moved-alpha-audio"
+    );
+    Ok(())
+}
+
+#[test]
 fn truncated_lookup_is_rejected() -> Result<()> {
     let (_temp, _addon, root) = fixture()?;
     let manifest: serde_json::Value =

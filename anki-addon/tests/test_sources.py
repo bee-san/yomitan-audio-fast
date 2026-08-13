@@ -177,6 +177,40 @@ class AJTMediaLayoutTests(unittest.TestCase):
                 rows = rows_of(connection)
         self.assertEqual(rows[0][5], str(Path("media/yomu.ogg")))
 
+    def test_meta_media_dir_outside_the_source_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outside = Path(temporary) / "shared_audio"
+            outside.mkdir()
+            (outside / "yomu.ogg").write_bytes(b"OggS-outside")
+            root = Path(temporary) / "taas_files"
+            index = self._index()
+            index["meta"]["media_dir"] = "../shared_audio"
+            write_index(root, index)
+            (root / "media").mkdir()
+            (root / "media" / "yomu.ogg").write_bytes(b"OggS-media")
+            with closing(make_connection()) as connection:
+                ajt_source(root).add_entries(connection)
+                rows = rows_of(connection)
+        self.assertEqual(rows[0][5], str(Path("media/yomu.ogg")))
+
+    def test_case_differing_index_key_still_resolves(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_index(
+                root,
+                {
+                    "meta": {"version": 1},
+                    "headwords": {"読む": ["Yomu.OGG"]},
+                    "files": {"Yomu.OGG": {"kana_reading": "よむ", "pitch_number": "1"}},
+                },
+            )
+            (root / "media").mkdir()
+            (root / "media" / "yomu.ogg").write_bytes(b"OggS")
+            with closing(make_connection()) as connection:
+                ajt_source(root).add_entries(connection)
+                rows = rows_of(connection)
+        self.assertEqual(rows[0][5], str(Path("media/yomu.ogg")))
+
     def test_nested_index_keys_and_missing_files_are_handled(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

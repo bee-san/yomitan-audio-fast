@@ -115,6 +115,10 @@ $addonRoot = Join-Path $env:APPDATA 'Anki2\addons21\1045800357'
   --pack-workers 8
 ```
 
+Source configuration is read exactly as the add-on reads it: `default_config.json`
+with `user_files/config.json` merged over it per key, then any default source whose
+`id` is absent from a pinned user `sources` list appended after it.
+
 Publication is versioned. The large files are completed before the small
 top-level manifest switches to the new content version.
 
