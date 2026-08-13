@@ -29,13 +29,13 @@
 
 This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon` tells Anki to replace the old code while preserving its `user_files` automatically.
 
-1. Download [`local-audio-fast.ankiaddon`](https://github.com/bee-san/yomitan-audio-fast/releases/latest/download/local-audio-fast.ankiaddon), or build it from a checkout:
+1. Download [`local-audio-fast.ankiaddon`](https://github.com/bee-san/yomitan-audio-fast/releases/)
 
-   ```powershell
-   .\anki-addon\build-code-only-package.ps1
-   ```
 
 2. In Anki, open **Tools → Add-ons → Install from file…** and choose it.
+<img width="806" height="155" alt="image" src="https://github.com/user-attachments/assets/fddc2b83-9130-4f9e-83d4-f44b4f633c1c" />
+
+
 3. Restart Anki. Your local audio is now much faster.
 
 If the add-on finds a valid database and referenced audio but no valid pack, it schedules one background acceleration build for that data fingerprint. You can also choose:
