@@ -34,7 +34,7 @@ This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon`
 1. Download [`local-audio-fast.ankiaddon`](https://github.com/bee-san/yomitan-audio-fast/releases/)
 
 
-2. In Anki, open **Tools → Add-ons → Install from file…** and choose it.
+2. In Anki, open **Tools → Add-ons → Install from file…** and choose it (or double click the file in a file browser)
 <img width="806" height="155" alt="image" src="https://github.com/user-attachments/assets/fddc2b83-9130-4f9e-83d4-f44b4f633c1c" />
 
 
