@@ -33,15 +33,38 @@ jobs:
 
           archive = "local-audio-fast.ankiaddon"
           with zipfile.ZipFile(archive) as package:
-              names = package.namelist()
+              names = set(package.namelist())
+              expected = {
+                  "__init__.py",
+                  "cleanup.py",
+                  "config.py",
+                  "consts.py",
+                  "db_utils.py",
+                  "default_config.json",
+                  "fast_pack.py",
+                  "fast_store.py",
+                  "gui.py",
+                  "import_dialog.py",
+                  "jp_util.py",
+                  "manifest.json",
+                  "migration.py",
+                  "progress_ui.py",
+                  "server.py",
+                  "util.py",
+                  "version.txt",
+                  "source/__init__.py",
+                  "source/ajt_jp.py",
+                  "source/audio_source.py",
+                  "source/flat.py",
+                  "source/forvo.py",
+                  "source/jpod.py",
+                  "source/nhk16.py",
+                  "source/ozk5.py",
+              }
+              assert names == expected, (sorted(expected - names), sorted(names - expected))
               assert "manifest.json" in names
               assert "__init__.py" in names
               assert json.loads(package.read("manifest.json"))["package"] == "1045800357"
-              forbidden = (".db", ".pack", ".idx", ".pyc")
-              assert not any(
-                  name.startswith("user_files/") or name.endswith(forbidden)
-                  for name in names
-              )
           PY
       - uses: actions/upload-artifact@v4
         with:
