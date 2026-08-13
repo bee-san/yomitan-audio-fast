@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>A drop-in desktop replacement for the Yomitan Local Audio Server Anki add-on, plus an Anki-free Rust server.</strong>
+  <strong>A drop-in desktop replacement for the Yomitan Local Audio Server Anki add-on which is 18.2X faster.</strong>
 </p>
 
 <p align="center">
@@ -21,42 +21,13 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-f97316"></a>
 </p>
 
-## 18.2× faster in Anki. 33.1× faster with Rust.
+1. Install https://github.com/yomidevs/local-audio-yomichan or https://github.com/friedrich-de/yomitan-ultimate-audio
+2. Install this
+3. Instantly get a speed boost, 23 seconds -> milliseconds
 
-Warm, full-response p50 latency on the same 590,410-row real-world collection:
+[curated final benchmark note](benchmarks/results/FINAL.md) and [raw metrics](benchmarks/results/standard-20260811-metrics.csv)
 
-| Workload | Original add-on | Fast Anki add-on | Standalone Rust |
-|---|---:|---:|---:|
-| Cached lookup | 5.513 ms | **0.574 ms — 9.6×** | **0.248 ms — 22.2×** |
-| Lookup + first audio | 23.548 ms | **1.294 ms — 18.2×** | **0.712 ms — 33.1×** |
-| One-request direct play | — | **0.659 ms** | **0.266 ms** |
-
-![Bar chart comparing original, optimized Anki, and Rust p50 latency](assets/benchmark-bars.svg)
-
-The standard performance run used five repeated trials, real source and Forvo filters, and byte-checked audio from the copied collection. Its only top-level failure was an obsolete harness rule that rejected Rust's valid HTTP `416` response body; the corrected follow-up passed **57/57 cases for every endpoint**. See the [curated final benchmark note](benchmarks/results/FINAL.md) and [raw metrics](benchmarks/results/standard-20260811-metrics.csv).
-
-## What this is
-
-The original add-on does correct work, but it repeats expensive work on every click: open a connection, open SQLite, build a dynamic query, open one of hundreds of thousands of files, then close the HTTP connection.
-
-Yomitan Audio Fast keeps the public contract and changes the hot path. Existing users keep the same add-on ID, port, `entries.db`, source priority, Forvo voices, candidate order, and audio bytes.
-
-Choose one runtime:
-
-| | Fast Anki add-on | Standalone Rust |
-|---|---|---|
-| Best for | Existing Local Audio Server users | Maximum speed without Anki |
-| Yomitan-compatible JSON | Yes | Yes |
-| Anki required while serving | Yes | No |
-| Private bundle build | Automatic/manual in Anki | `compile` command |
-| Measured lookup + audio p50 | 1.294 ms | 0.712 ms |
-| Recommended port | `5050` | `5052` when Anki owns `5050` |
-
-No audio, database, generated pack, executable, or private bundle is committed to this repository.
-
-## Install / upgrade
-
-### Existing Local Audio Server user — recommended
+# Install
 
 This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon` tells Anki to replace the old code while preserving its `user_files` automatically.
 
@@ -67,18 +38,7 @@ This is a same-ID replacement for add-on `1045800357`. The packaged `.ankiaddon`
    ```
 
 2. In Anki, open **Tools → Add-ons → Install from file…** and choose it.
-3. Restart Anki. Your existing database and audio are retained.
-
-You can also use **Tools → Local Audio Server → Import existing audio collection…** and drop an old add-on folder, `user_files`, collection root, or recognized source folder onto the window. Browse uses the exact same validated path. Original files are never moved or deleted.
-
-For development, a manual same-ID overlay still works:
-
-```powershell
-$addon = Join-Path $env:APPDATA 'Anki2\addons21\1045800357'
-Copy-Item .\anki-addon\* $addon -Recurse -Force
-```
-
-Keep the existing `user_files` when using the manual method.
+3. Restart Anki. Your local audio is now much faster.
 
 If the add-on finds a valid database and referenced audio but no valid pack, it schedules one background acceleration build for that data fingerprint. You can also choose:
 
@@ -90,10 +50,6 @@ The picker accepts an old add-on root, its `user_files` directory, a collection 
 > The first pack build is a one-time local job and can take minutes on a very large collection. The measured pack was 1.60 GiB. Loose originals remain available as a safe fallback, so allow roughly the referenced audio size in free space unless you import the already-verified Rust pack as an NTFS hardlink.
 
 The build window shows exact row progress and a **Cancel** button. A cancellation checkpoints the completed pack/index data without changing the active pack. Opening the action again—or restarting Anki after an interrupted automatic build—resumes from that checkpoint without rereading audio that is already packed. Source metadata is rechecked before publication, so changed files trigger a clean rebuild instead of a mixed pack.
-
-Tested end to end on Windows 11 with Anki 25.09.5 / CPython 3.13.5. Other desktop platforms are not yet part of the release evidence. Android and `android.db` are deliberately out of scope.
-
-More detail: [Anki add-on guide](anki-addon/README.md).
 
 ## Use it
 
@@ -134,18 +90,6 @@ per-request filters, or fallback candidates are needed.
 ## How it became faster
 
 ![Before-and-after architecture showing retained connections, SQLite reuse, mmap indexes, and packed audio](assets/architecture.svg)
-
-### Fast Anki add-on
-
-1. **Reuse the HTTP connection.** HTTP/1.1 keep-alive replaces HTTP/1.0 connection churn.
-2. **Keep SQLite warm.** A bounded pool of immutable, query-only connections replaces open/close per request. Row and final-response LRUs absorb repeat lookups.
-3. **Use the indexed query shape that won.** `reading IS NULL OR reading=?` preserved a 23.5 µs median while avoiding the 628.2 µs p95 of term-only SQL plus Python filtering.
-4. **Turn row IDs into byte offsets.** Every database row resolves through one fixed 16-byte mmap record containing pack offset, length, and MIME type.
-5. **Map one immutable audio pack.** Playback reads only the selected range instead of paying Windows filesystem overhead for a loose file on every request.
-6. **Return numeric loopback URLs.** `127.0.0.1` avoids the roughly two-second IPv6 `localhost` fallback observed on this machine.
-7. **Make rebuilds cheaper.** Database regeneration batches 8,192 rows and defers index creation, measuring 1.46× the original fixture throughput.
-
-On 2,000 real recordings, loose-file open/read measured 314.1 µs p50; creating the mapped pack view measured 1.2 µs. End-to-end packed audio HTTP was **2.23× faster**. The pack is mapped lazily—the 1.60 GiB file is not loaded wholesale into RAM.
 
 ### Standalone Rust
 
