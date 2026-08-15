@@ -68,9 +68,24 @@ def _finish_job() -> None:
         _active_job = None
 
 
+def _operation_failed_message(error: Exception) -> str:
+    """Calm, plain copy for an unexpected failure, with the raw error kept for support.
+
+    Every add-on operation stops safely and never deletes audio, so the lead
+    reassures the user before the technical detail an ordinary user can ignore.
+    """
+
+    return (
+        "Local Audio Server ran into a problem and stopped safely.\n\n"
+        "Nothing was deleted, and your audio is still there. You can try the action "
+        "again, and restarting Anki often clears a temporary problem.\n\n"
+        f"Technical detail: {error}"
+    )
+
+
 def _operation_failure(error: Exception) -> None:
     _finish_job()
-    showWarning(f"Local Audio Server operation failed:\n\n{error}")
+    showWarning(_operation_failed_message(error))
 
 
 def _pack_operation_failure(error: Exception, progress) -> None:
@@ -86,11 +101,11 @@ def _pack_operation_failure(error: Exception, progress) -> None:
             position = f" ({completed / total:.0%})"
         showInfo(
             f"{error.progress.message}{position}\n\n"
-            "Open the build/import action again—or restart Anki—to continue "
-            "from the saved checkpoint. The current audio server remains usable."
+            "Start the build or import again—or restart Anki—and it will pick up "
+            "where it left off. Your audio keeps working in the meantime."
         )
     else:
-        showWarning(f"Local Audio Server operation failed:\n\n{error}")
+        showWarning(_operation_failed_message(error))
 
 
 def _with_failure(operation, callback=_operation_failure):

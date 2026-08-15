@@ -265,5 +265,47 @@ class SuccessProgressCopyTests(unittest.TestCase):
         self.assertIn("trash", lowered)  # references that Trash cleanup is unavailable
 
 
+class OperationFailedMessageTests(unittest.TestCase):
+    """The catch-all failure dialog should reassure and keep jargon out of the lead."""
+
+    def setUp(self) -> None:
+        self.warnings: list[str] = []
+        self.infos: list[str] = []
+        self.gui = _load_gui(self.warnings, self.infos)
+
+    def test_generic_failure_leads_plain_and_reassures(self) -> None:
+        error = RuntimeError(
+            "database regeneration is blocked while packed-only-v1.json exists; "
+            "restore the complete original collection first"
+        )
+        message = self.gui._operation_failed_message(error)
+        lowered = message.lower()
+        # Calm, plain lead — a problem happened and it stopped safely.
+        self.assertTrue(
+            "ran into a problem" in lowered or "couldn't finish" in lowered,
+            f"lead should be calm/plain, got: {message!r}",
+        )
+        # Reassures nothing was deleted, up top.
+        top = "\n".join(message.splitlines()[:3]).lower()
+        self.assertIn("delet", top)
+        self.assertIn("nothing", top)
+        # Raw internal string preserved only as technical detail, after the lead.
+        self.assertIn("Technical detail", message)
+        self.assertIn("packed-only-v1.json", message)
+        self.assertLess(
+            message.index("Technical detail"),
+            message.index("packed-only-v1.json"),
+        )
+        self.assertNotIn("packed-only-v1.json", message.split("Technical detail")[0])
+
+    def test_operation_failure_handler_uses_the_helper(self) -> None:
+        with patch.object(self.gui, "_finish_job", lambda: None):
+            self.gui._operation_failure(RuntimeError("quick_check failed: malformed"))
+        self.assertEqual(len(self.warnings), 1)
+        message = self.warnings[0]
+        self.assertNotIn("quick_check", message.split("Technical detail")[0])
+        self.assertIn("quick_check failed: malformed", message)
+
+
 if __name__ == "__main__":
     unittest.main()
