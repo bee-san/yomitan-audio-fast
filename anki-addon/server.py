@@ -133,14 +133,22 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
         elif "expression" in values:
             expression = values["expression"][0]
         else:
-            raise ValueError("missing term or expression")
-        if not expression or len(expression) > MAX_TERM_LENGTH:
-            raise ValueError("term is empty or too long")
+            raise ValueError(
+                "add a 'term' (or 'expression') query parameter naming the word to look up"
+            )
+        if not expression:
+            raise ValueError("the 'term' is empty; provide the word to look up")
+        if len(expression) > MAX_TERM_LENGTH:
+            raise ValueError(
+                f"the 'term' is too long; use at most {MAX_TERM_LENGTH} characters"
+            )
         reading = values.get("reading", [None])[0]
         if reading == "":
             reading = None
         if reading is not None and len(reading) > MAX_TERM_LENGTH:
-            raise ValueError("reading is too long")
+            raise ValueError(
+                f"the 'reading' is too long; use at most {MAX_TERM_LENGTH} characters"
+            )
         return values, expression, reading
 
     def _parse_lookup(self, query: str) -> LookupRequest:
@@ -159,7 +167,9 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
             if value.strip()
         )
         if len(sources) > MAX_FILTER_VALUES or len(users) > MAX_FILTER_VALUES:
-            raise ValueError("too many source or user filters")
+            raise ValueError(
+                f"too many 'sources' or 'user' filters; list at most {MAX_FILTER_VALUES} of each"
+            )
         return LookupRequest(expression, reading, sources, users)
 
     def _parse_first_lookup(self, query: str) -> FirstAudioRequest:
@@ -483,7 +493,12 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
                     head_only,
                     cache_control="no-store",
                 ):
-                    self._error(HTTPStatus.NOT_FOUND, "no audio candidate", head_only)
+                    self._error(
+                        HTTPStatus.NOT_FOUND,
+                        "no audio was found for that term and reading; "
+                        "try a different reading or check your configured sources",
+                        head_only,
+                    )
                 return
             payload = self.runtime.store.candidates_payload(request)
             self._payload(
@@ -522,7 +537,12 @@ class LocalAudioHandler(BaseHTTPRequestHandler):
                 (("Cache-Control", "no-store"),),
             )
             return
-        self._error(HTTPStatus.NOT_FOUND, "not found", head_only)
+        self._error(
+            HTTPStatus.NOT_FOUND,
+            "unknown request path; use / with a 'term' query, or "
+            "/v1/play, /v1/candidates, /v1/first, /v1/info, or /healthz",
+            head_only,
+        )
 
     def do_GET(self) -> None:
         self._dispatch(head_only=False)
@@ -558,7 +578,10 @@ class ServerRuntime:
         row_cache_size: Optional[int] = None,
     ) -> None:
         if host != "127.0.0.1":
-            raise ValueError("the desktop audio server only binds to 127.0.0.1")
+            raise ValueError(
+                "the desktop audio server only listens on 127.0.0.1 (your own "
+                "computer); set the host back to 127.0.0.1 and restart it"
+            )
         config = get_server_config()
         self.server = OptimizedHTTPServer((host, port))
         actual_port = self.server.server_address[1]

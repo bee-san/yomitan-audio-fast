@@ -146,6 +146,71 @@ class ServerTests(unittest.TestCase):
             path += f"&reading={quote(reading)}"
         return path + suffix
 
+    def error_message(self, method: str, path: str) -> tuple[int, str]:
+        response, payload = self.request(method, path)
+        parsed = json.loads(payload)
+        self.assertIn("error", parsed)
+        return response.status, parsed["error"]
+
+    def test_bad_request_errors_name_the_input_and_stay_json(self) -> None:
+        # Missing term/expression: keeps 400 + {error} shape, names the parameter
+        # to add and how to recover, no stack trace or vague "something went wrong".
+        status, message = self.error_message("GET", "/?reading=%E3%81%AD%E3%81%93")
+        self.assertEqual(status, 400)
+        self.assertIn("term", message)
+        self.assertIn("expression", message)
+        self.assertNotIn("Traceback", message)
+
+        # Empty term is distinct from a too-long term.
+        status, message = self.error_message("GET", "/?term=")
+        self.assertEqual(status, 400)
+        self.assertIn("empty", message.lower())
+
+        # Too-long term states the concrete limit so the caller can trim it.
+        status, message = self.error_message(
+            "GET", "/?term=" + quote("あ" * (server_module.MAX_TERM_LENGTH + 1))
+        )
+        self.assertEqual(status, 400)
+        self.assertIn(str(server_module.MAX_TERM_LENGTH), message)
+        self.assertIn("term", message.lower())
+
+        # Too-long reading names "reading" (not "term") and the limit.
+        status, message = self.error_message(
+            "GET",
+            "/?term="
+            + quote("猫")
+            + "&reading="
+            + quote("あ" * (server_module.MAX_TERM_LENGTH + 1)),
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("reading", message.lower())
+        self.assertIn(str(server_module.MAX_TERM_LENGTH), message)
+
+        # Too many filters names sources/user and the per-filter cap.
+        many = ",".join(str(index) for index in range(server_module.MAX_FILTER_VALUES + 1))
+        status, message = self.error_message(
+            "GET", "/?term=" + quote("猫") + "&sources=" + quote(many)
+        )
+        self.assertEqual(status, 400)
+        self.assertIn(str(server_module.MAX_FILTER_VALUES), message)
+        self.assertIn("sources", message.lower())
+
+    def test_play_miss_and_unknown_path_are_actionable(self) -> None:
+        # A /v1/play miss stays 404 + {error}, tells the user nothing matched
+        # and what to try, and does not read as a generic failure.
+        status, message = self.error_message("GET", "/v1/play?term=missing")
+        self.assertEqual(status, 404)
+        lowered = message.lower()
+        self.assertTrue("no audio" in lowered or "not find" in lowered)
+        self.assertNotEqual(message.strip().lower(), "something went wrong")
+
+        # The catch-all 404 points at the real endpoints instead of a bare
+        # "not found".
+        status, message = self.error_message("GET", "/does/not/exist")
+        self.assertEqual(status, 404)
+        self.assertIn("/v1/play", message)
+        self.assertIn("term", message.lower())
+
     def test_yomitan_compatibility_order_filters_and_keepalive(self) -> None:
         response, payload = self.request("GET", self.lookup_path("猫", "ねこ"))
         self.assertEqual(response.status, 200)

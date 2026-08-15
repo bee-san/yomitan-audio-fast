@@ -22,7 +22,10 @@ def load_addon(root: Path):
         submodule_search_locations=[str(root)],
     )
     if specification is None or specification.loader is None:
-        raise RuntimeError(f"cannot load add-on package from {root}")
+        raise RuntimeError(
+            f"could not load the add-on from {root}; make sure --root points at "
+            "the add-on folder containing __init__.py"
+        )
     package = importlib.util.module_from_spec(specification)
     sys.modules[PACKAGE_NAME] = package
     specification.loader.exec_module(package)
