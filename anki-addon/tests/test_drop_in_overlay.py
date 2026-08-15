@@ -52,6 +52,9 @@ class DropInOverlayTests(unittest.TestCase):
         fake_gui.init_gui = lambda: None
         fake_server = types.ModuleType(f"{package_name}.server")
         fake_server.run_server = lambda: None
+        fake_server.ServerStartupError = type(
+            "ServerStartupError", (RuntimeError,), {}
+        )
         old_standalone = os.environ.pop("LOCAL_AUDIO_FAST_STANDALONE", None)
         try:
             with patch.dict(

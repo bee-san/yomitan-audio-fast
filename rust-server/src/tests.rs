@@ -232,6 +232,61 @@ fn pinned_user_sources_keep_their_paths_and_gain_new_defaults() -> Result<()> {
 }
 
 #[test]
+fn rejected_queries_name_the_input_and_the_limit() -> Result<()> {
+    use crate::query::parse_query;
+
+    // Missing term/expression names both parameters and how to recover, and
+    // matches the Python server's wording for endpoint parity.
+    let message = parse_query(Some("reading=%E3%81%AD%E3%81%93"))
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("term"), "{message}");
+    assert!(message.contains("expression"), "{message}");
+    // Recovery-oriented: tells the caller to ADD the parameter, matching Python.
+    assert!(message.contains("add a"), "{message}");
+
+    // Too-long term names "term", states the concrete byte limit, and phrases
+    // the fix as a limit to stay under ("use at most") rather than "exceeds".
+    let long_term = format!("term={}", "a".repeat(1_025));
+    let message = parse_query(Some(&long_term)).unwrap_err().to_string();
+    assert!(message.to_lowercase().contains("term"), "{message}");
+    assert!(message.contains("1024"), "{message}");
+    assert!(message.contains("use at most"), "{message}");
+
+    // Too-long reading names "reading" (not "term"), the limit, and the fix.
+    let long_reading = format!("term=x&reading={}", "a".repeat(1_025));
+    let message = parse_query(Some(&long_reading)).unwrap_err().to_string();
+    assert!(message.to_lowercase().contains("reading"), "{message}");
+    assert!(message.contains("1024"), "{message}");
+    assert!(message.contains("use at most"), "{message}");
+
+    // Too many sources names "sources", the cap, and how to recover.
+    let many_sources = format!(
+        "term=x&sources={}",
+        (0..33).map(|n| n.to_string()).collect::<Vec<_>>().join(",")
+    );
+    let message = parse_query(Some(&many_sources)).unwrap_err().to_string();
+    assert!(message.to_lowercase().contains("sources"), "{message}");
+    assert!(message.contains("32"), "{message}");
+    assert!(message.contains("list at most"), "{message}");
+
+    // Too many users names "user", the cap, and how to recover.
+    let many_users = format!(
+        "term=x&user={}",
+        (0..129)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let message = parse_query(Some(&many_users)).unwrap_err().to_string();
+    assert!(message.to_lowercase().contains("user"), "{message}");
+    assert!(message.contains("128"), "{message}");
+    assert!(message.contains("list at most"), "{message}");
+
+    Ok(())
+}
+
+#[test]
 fn truncated_lookup_is_rejected() -> Result<()> {
     let (_temp, _addon, root) = fixture()?;
     let manifest: serde_json::Value =

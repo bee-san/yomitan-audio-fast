@@ -91,7 +91,8 @@ struct InfoResponse {
 pub async fn serve(options: ServeOptions) -> Result<()> {
     ensure!(
         options.host.is_loopback(),
-        "refusing to bind non-loopback address {}",
+        "the audio server only listens on a loopback address (127.0.0.1 or ::1); \
+         set --host to 127.0.0.1 and retry (requested {})",
         options.host
     );
     let bundle = Arc::new(Bundle::open(&options.bundle_root, options.verify_index)?);
@@ -106,12 +107,16 @@ pub async fn serve(options: ServeOptions) -> Result<()> {
             })?))
         }
         (AssetMode::Files, None) => {
-            anyhow::bail!("--legacy-root is required with --asset-mode files")
+            anyhow::bail!(
+                "--asset-mode files needs --legacy-root pointing at the folder \
+                 that holds the original audio files"
+            )
         }
     };
-    let listener = TcpListener::bind(SocketAddr::new(options.host, options.port))
+    let bind_address = SocketAddr::new(options.host, options.port);
+    let listener = TcpListener::bind(bind_address)
         .await
-        .context("cannot bind loopback server")?;
+        .map_err(|error| anyhow::anyhow!(bind_failure_message(bind_address, error)))?;
     let address = listener.local_addr()?;
     let listener = listener.tap_io(|stream| {
         if let Err(error) = stream.set_nodelay(true) {
@@ -200,11 +205,7 @@ async fn compatibility(
         let candidates = match state.engine.candidates(&query) {
             Ok(value) => value,
             Err(error) => {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &error.to_string(),
-                    method == Method::HEAD,
-                );
+                return internal_error_response("looking up audio", error, method == Method::HEAD);
             }
         };
         let audio_sources = candidates
@@ -224,9 +225,9 @@ async fn compatibility(
         let serialized = match serde_json::to_vec(&response) {
             Ok(value) => Bytes::from(value),
             Err(error) => {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &error.to_string(),
+                return internal_error_response(
+                    "preparing the audio list",
+                    error,
                     method == Method::HEAD,
                 );
             }
@@ -300,9 +301,9 @@ async fn candidates(
             .map(|candidate| state.engine.candidate_response(candidate, &state.base_url))
             .collect(),
         Err(error) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &error.to_string(),
+            return internal_error_response(
+                "listing audio candidates",
+                error,
                 method == Method::HEAD,
             );
         }
@@ -337,16 +338,13 @@ async fn play(
         Ok(None) => {
             return error_response(
                 StatusCode::NOT_FOUND,
-                "no audio candidate",
+                "no audio was found for that term and reading; \
+                 try a different reading or check your configured sources",
                 method == Method::HEAD,
             );
         }
         Err(error) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &error.to_string(),
-                method == Method::HEAD,
-            );
+            return internal_error_response("finding audio to play", error, method == Method::HEAD);
         }
     };
     audio_response(
@@ -369,7 +367,8 @@ async fn audio_by_id(
     if version != state.engine.bundle().manifest.bundle_version {
         return error_response(
             StatusCode::NOT_FOUND,
-            "unknown bundle version",
+            "that audio link is from an older bundle version; \
+             request a fresh audio URL from a lookup and retry",
             method == Method::HEAD,
         );
     }
@@ -378,7 +377,8 @@ async fn audio_by_id(
         Err(_) => {
             return error_response(
                 StatusCode::NOT_FOUND,
-                "unknown audio ID",
+                "that audio ID is not in this bundle; \
+                 request a fresh audio URL from a lookup and retry",
                 method == Method::HEAD,
             );
         }
@@ -451,11 +451,7 @@ async fn audio_response(
             AssetMode::Pack => match state.engine.bundle().audio_bytes(audio, start, length) {
                 Ok(bytes) => bytes,
                 Err(error) => {
-                    return error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        &error.to_string(),
-                        false,
-                    );
+                    return internal_error_response("serving audio", error, false);
                 }
             },
             AssetMode::Files => {
@@ -472,18 +468,10 @@ async fn audio_response(
                 {
                     Ok(Ok(bytes)) => Bytes::from(bytes),
                     Ok(Err(error)) => {
-                        return error_response(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            &error.to_string(),
-                            false,
-                        );
+                        return internal_error_response("reading audio from disk", error, false);
                     }
                     Err(error) => {
-                        return error_response(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            &error.to_string(),
-                            false,
-                        );
+                        return internal_error_response("reading audio from disk", error, false);
                     }
                 }
             }
@@ -612,7 +600,12 @@ async fn preflight() -> Response<Body> {
 }
 
 async fn not_found(method: Method) -> Response<Body> {
-    error_response(StatusCode::NOT_FOUND, "not found", method == Method::HEAD)
+    error_response(
+        StatusCode::NOT_FOUND,
+        "unknown request path; use / with a 'term' query, or \
+         /v1/play, /v1/candidates, /v1/info, or /healthz",
+        method == Method::HEAD,
+    )
 }
 
 fn json_response<T: Serialize>(value: &T, head: bool) -> Response<Body> {
@@ -639,6 +632,56 @@ fn error_response(status: StatusCode, message: &str, head: bool) -> Response<Bod
         bytes,
         head,
         false,
+    )
+}
+
+/// Stable, task-oriented copy returned for any HTTP 500.
+///
+/// The precise engine/serialization/pack invariant is logged server-side by
+/// [`internal_error_response`] and never reaches the client, so corrupt or
+/// incompatible runtime data can no longer leak internal table/range/layout
+/// detail as user copy. `{task}` names the user activity ("looking up audio",
+/// "serving audio") so the message stays specific without exposing internals.
+fn internal_error_message(task: &str) -> String {
+    format!(
+        "The audio server ran into an internal problem while {task}. Your audio \
+         bundle may be incomplete or from an incompatible version. Rebuild the \
+         audio bundle or restart the server, then try again."
+    )
+}
+
+/// Log the raw error server-side and return a stable friendly 500 to the client.
+///
+/// Preserves the HTTP 500 status, JSON `{"error": ...}` body shape, JSON content
+/// type, and HEAD (empty body) semantics of the previous `error_response(...,
+/// &error.to_string(), ...)` call sites — only the *content* of the message
+/// changes from a raw invariant to actionable copy. The full diagnostic is kept
+/// on stderr for support.
+fn internal_error_response(
+    task: &str,
+    error: impl std::fmt::Display,
+    head: bool,
+) -> Response<Body> {
+    eprintln!("error: internal server error while {task}: {error}");
+    error_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        &internal_error_message(task),
+        head,
+    )
+}
+
+/// Friendly, actionable copy for a failed loopback bind, keeping the raw cause.
+///
+/// The overwhelmingly common cause is the port already being in use by another
+/// local server. Names the exact address/port and a concrete recovery, then
+/// appends the raw OS error so logs and diagnostics keep the precise failure.
+fn bind_failure_message(address: SocketAddr, error: impl std::fmt::Display) -> String {
+    format!(
+        "Could not start the audio server: the address {address} is not available. \
+         Another program may already be using port {}. Stop the other local audio \
+         server, or choose a free port with --port, then start it again.\n\
+         Technical detail: {error}",
+        address.port()
     )
 }
 
@@ -685,4 +728,86 @@ fn add_common_headers(headers: &mut HeaderMap) {
 
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
+}
+
+#[cfg(test)]
+mod http_error_tests {
+    use super::*;
+
+    async fn body_string(response: Response<Body>) -> (StatusCode, String, Option<String>) {
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            String::from_utf8(bytes.to_vec()).unwrap(),
+            content_type,
+        )
+    }
+
+    fn raw_invariant() -> anyhow::Error {
+        // A representative internal invariant that must NEVER reach the client:
+        // the kind of low-level table/range/layout detail engine errors carry.
+        anyhow::anyhow!("record 42 offset 9187 exceeds mmap pack length 4096")
+    }
+
+    #[tokio::test]
+    async fn internal_error_response_hides_raw_invariant_and_stays_stable() {
+        let response = internal_error_response("looking up audio", raw_invariant(), false);
+        let (status, body, content_type) = body_string(response).await;
+        // Protocol shape is preserved: 500 + JSON {error} + JSON content type.
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            content_type.as_deref(),
+            Some("application/json; charset=utf-8")
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let message = parsed
+            .get("error")
+            .and_then(|value| value.as_str())
+            .expect("error field is a string");
+        // The raw internal invariant is not leaked to the user.
+        assert!(
+            !message.contains("mmap") && !message.contains("offset") && !message.contains("4096"),
+            "raw invariant leaked into user copy: {message}"
+        );
+        // Stable, task-oriented recovery copy: names the task and a next action.
+        let lowered = message.to_lowercase();
+        assert!(lowered.contains("audio"), "{message}");
+        assert!(
+            lowered.contains("rebuild") || lowered.contains("restart"),
+            "must suggest a recovery action: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn internal_error_response_head_omits_body_but_keeps_status() {
+        let response = internal_error_response("serving audio", raw_invariant(), true);
+        let (status, body, _content_type) = body_string(response).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        // HEAD semantics preserved: no body bytes.
+        assert!(body.is_empty(), "HEAD response must have an empty body");
+    }
+
+    #[test]
+    fn bind_failure_message_is_actionable_and_keeps_raw_detail() {
+        let cause = std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            "Address already in use (os error 98)",
+        );
+        let message =
+            bind_failure_message(std::net::SocketAddr::from(([127, 0, 0, 1], 5050)), &cause);
+        let lowered = message.to_lowercase();
+        // Names the port and a concrete recovery, not a bare "cannot bind".
+        assert!(lowered.contains("5050"), "{message}");
+        assert!(lowered.contains("port"), "{message}");
+        // Keeps the raw OS detail for diagnostics.
+        assert!(message.contains("Address already in use"), "{message}");
+    }
 }

@@ -86,8 +86,10 @@ class ExistingAudioDropDialog(QDialog):
             self._validator(path)
         except (OSError, ValueError) as error:
             self._label.setText(
-                "That folder is not a recognized Local Audio Server collection.\n\n"
-                f"{error}\n\nTry another folder."
+                "That folder doesn't look like a Local Audio Server collection.\n\n"
+                "Pick the folder that holds your audio (the old add-on folder, or its "
+                "user_files folder), then try another folder.\n\n"
+                f"Details: {error}"
             )
             return
         self.selected_path = path

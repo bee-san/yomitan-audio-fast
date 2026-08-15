@@ -1308,8 +1308,8 @@ def _build_audio_pack_locked(
     def packing_progress(message: Optional[str] = None) -> PackProgress:
         prefix = "Resumed. " if resumed else ""
         label = message or (
-            f"{prefix}Processed {counters['processed_source_paths']:,} source paths; "
-            f"packed {counters['unique_files']:,} unique blobs; "
+            f"{prefix}Processed {counters['processed_source_paths']:,} audio entries; "
+            f"packed {counters['unique_files']:,} unique audio files; "
             f"skipped {counters['missing_files']:,}"
         )
         return PackProgress(
@@ -1540,7 +1540,7 @@ def _build_audio_pack_locked(
                 "packing",
                 total_rows,
                 total_rows,
-                f"Packed {counters['unique_files']:,} unique audio blobs; verifying output...",
+                f"Packed {counters['unique_files']:,} unique audio files; checking the result...",
                 resumed,
             )
         )

@@ -22,7 +22,10 @@ def load_addon(root: Path):
         submodule_search_locations=[str(root)],
     )
     if specification is None or specification.loader is None:
-        raise RuntimeError(f"cannot load add-on package from {root}")
+        raise RuntimeError(
+            f"could not load the add-on from {root}; make sure --root points at "
+            "the add-on folder containing __init__.py"
+        )
     package = importlib.util.module_from_spec(specification)
     sys.modules[PACKAGE_NAME] = package
     specification.loader.exec_module(package)
@@ -76,15 +79,34 @@ def main() -> None:
     if args.build_only:
         return
     port = args.port if args.port is not None else config["port"]
-    runtime = server_module.ServerRuntime(
-        host=args.host,
-        port=port,
-        db_path=db_path,
-        pack_root=pack_root,
-        lookup_mode=args.lookup_mode or config["lookup_mode"],
-        response_cache_size=config["response_cache_entries"],
-        row_cache_size=config["row_cache_entries"],
-    )
+    server_startup_error = getattr(server_module, "ServerStartupError", None)
+    try:
+        runtime = server_module.ServerRuntime(
+            host=args.host,
+            port=port,
+            db_path=db_path,
+            pack_root=pack_root,
+            lookup_mode=args.lookup_mode or config["lookup_mode"],
+            response_cache_size=config["response_cache_entries"],
+            row_cache_size=config["row_cache_entries"],
+        )
+    except Exception as error:
+        # A fatal start failure must not dump a raw traceback at the user. For the
+        # common bind failure the ServerRuntime already raises a ServerStartupError
+        # whose message names the port and recovery; for any other constructor
+        # failure (e.g. an unreadable database or pack) lead with neutral copy so we
+        # don't misattribute it to a busy port. The raw cause is kept either way, and
+        # we exit non-zero so scripts and launchers still see the failure.
+        if server_startup_error is not None and isinstance(error, server_startup_error):
+            message = str(error)
+        else:
+            message = (
+                "Local Audio Server could not start. Check that its database and "
+                "audio files are present and readable, then try again.\n\n"
+                f"Technical detail: {error}"
+            )
+        print(message, file=sys.stderr, flush=True)
+        raise SystemExit(1)
     print(f"Local Audio Fast ready: {runtime.base_url}/", flush=True)
     print(f"Health: {runtime.base_url}/healthz", flush=True)
     print(

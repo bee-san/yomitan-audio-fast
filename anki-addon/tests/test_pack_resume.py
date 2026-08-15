@@ -165,6 +165,11 @@ class PackResumeTests(unittest.TestCase):
         ]
         self.assertEqual(packing_values, sorted(packing_values))
         self.assertEqual(packing_values[-1], 6)
+        # Progress text shown to ordinary users must avoid implementation jargon.
+        for item in progress_updates:
+            lowered = item.message.lower()
+            self.assertNotIn("blob", lowered, item.message)
+            self.assertNotIn("source paths", lowered, item.message)
 
         clean_root = self.root / "clean-pack"
         clean = fast_pack.build_audio_pack(
