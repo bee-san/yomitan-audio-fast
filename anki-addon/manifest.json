@@ -3,6 +3,6 @@
   "name": "Local Audio Server for Yomitan (Fast Desktop)",
   "mod": 1786639721,
   "min_point_version": 50,
-  "human_version": "2.0.1-fast",
+  "human_version": "2.0.2-fast",
   "homepage": "https://github.com/bee-san/yomitan-audio-fast"
 }

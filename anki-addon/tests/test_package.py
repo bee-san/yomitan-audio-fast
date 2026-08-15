@@ -46,7 +46,16 @@ class PackageDefinitionTests(unittest.TestCase):
 
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["package"], "1045800357")
-        self.assertEqual(manifest["human_version"], "2.0.1-fast")
+        self.assertEqual(manifest["human_version"], "2.0.2-fast")
+
+    def test_shipped_version_files_agree_on_the_release(self) -> None:
+        # version.txt is the add-on's shipped version; manifest human_version
+        # mirrors it with the -fast suffix. They must stay in lock-step so the
+        # release card tags/publishes the version the package actually reports.
+        version = (ROOT / "version.txt").read_text(encoding="utf-8").strip()
+        self.assertEqual(version, "2.0.2")
+        manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["human_version"], f"{version}-fast")
 
 
 if __name__ == "__main__":

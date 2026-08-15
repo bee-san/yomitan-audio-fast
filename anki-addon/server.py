@@ -32,6 +32,33 @@ MAX_FILTER_VALUES = 128
 STREAM_BUFFER_SIZE = 64 * 1024
 
 
+class ServerStartupError(RuntimeError):
+    """A fatal server-start failure, carrying friendly, actionable guidance.
+
+    The ``str()`` of this error is safe to show an ordinary user: it explains
+    that the server could not start, gives concrete recovery steps, and appends
+    the raw cause as technical detail. The original exception is chained as
+    ``__cause__`` so logs and diagnostics keep the precise failure.
+    """
+
+
+def startup_failure_message(error: BaseException) -> str:
+    """Build friendly, actionable copy for a fatal server-start failure.
+
+    Leads with what happened and what to do (the most common cause by far is the
+    configured port already being in use by another local server), then appends
+    the raw error as technical detail without hiding it.
+    """
+
+    return (
+        "Local Audio Server could not start.\n\n"
+        "Another program may already be using its port on your computer. Close "
+        "the other local audio server if you have one running, or change the "
+        "port in the add-on's configuration to a free one, then restart Anki.\n\n"
+        f"Technical detail: {error}"
+    )
+
+
 class OptimizedHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     block_on_close = False
@@ -583,7 +610,13 @@ class ServerRuntime:
                 "computer); set the host back to 127.0.0.1 and restart it"
             )
         config = get_server_config()
-        self.server = OptimizedHTTPServer((host, port))
+        try:
+            self.server = OptimizedHTTPServer((host, port))
+        except OSError as error:
+            # The overwhelmingly common cause is the port already being held by
+            # another local server. Turn the raw OSError into friendly, actionable
+            # guidance while chaining the original for logs/diagnostics.
+            raise ServerStartupError(startup_failure_message(error)) from error
         actual_port = self.server.server_address[1]
         root = get_program_root_path()
         try:

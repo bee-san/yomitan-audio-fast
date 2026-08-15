@@ -8,6 +8,7 @@ import json
 import os
 import gc
 import shutil
+import socket
 import sqlite3
 import struct
 import sys
@@ -568,6 +569,64 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(
             info["databaseConnections"], info["idleDatabaseConnections"]
         )
+
+
+class StartupFailureMessageTests(unittest.TestCase):
+    """A failed server start must guide the user, not leak a raw OSError."""
+
+    def test_startup_failure_message_is_actionable_and_keeps_raw_detail(self) -> None:
+        error = OSError(98, "Address already in use")
+        message = server_module.startup_failure_message(error)
+        lowered = message.lower()
+        # Names the product and that it could not start — not a bare exception.
+        self.assertIn("local audio server", lowered)
+        self.assertTrue(
+            "could not start" in lowered or "couldn't start" in lowered,
+            f"lead should say the server could not start, got: {message!r}",
+        )
+        # Gives concrete recovery: free/change the port or stop the other server,
+        # then restart.
+        self.assertIn("port", lowered)
+        self.assertIn("restart", lowered)
+        # Preserves the raw OS detail after the guidance, for support.
+        self.assertIn("Technical detail", message)
+        self.assertIn("Address already in use", message)
+        self.assertLess(
+            message.index("Technical detail"),
+            message.index("Address already in use"),
+        )
+
+    def _bind_free_port(self) -> tuple[socket.socket, int]:
+        holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        return holder, holder.getsockname()[1]
+
+    def test_run_server_wraps_bind_failure_in_a_friendly_startup_error(self) -> None:
+        # Hold a port so ServerRuntime's bind fails with EADDRINUSE, exactly like
+        # a second server instance would hit in the field. An actively-listening
+        # socket cannot be rebound even with SO_REUSEADDR, so this is reliable.
+        holder, port = self._bind_free_port()
+        try:
+            with self.assertRaises(server_module.ServerStartupError) as caught:
+                server_module.ServerRuntime(host="127.0.0.1", port=port)
+        finally:
+            holder.close()
+        error = caught.exception
+        # The friendly guidance is the string a user sees; the raw cause is kept.
+        message = str(error)
+        self.assertIn("port", message.lower())
+        self.assertIn("Technical detail", message)
+        self.assertIsInstance(error.__cause__, OSError)
+
+    def test_server_runtime_bind_success_is_unaffected(self) -> None:
+        # The friendly-error wrapping must not change the happy path: a free port
+        # still constructs a working runtime that binds and can be stopped.
+        runtime = server_module.ServerRuntime(host="127.0.0.1", port=0)
+        try:
+            self.assertNotEqual(runtime.address[1], 0)
+        finally:
+            runtime.stop()
 
 
 if __name__ == "__main__":
