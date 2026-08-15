@@ -202,11 +202,26 @@ class PackedOnlyBlockMessageTests(unittest.TestCase):
         self.assertNotIn("packed-only", headline)
         self.assertNotIn(".json", headline)
         lowered = message.lower()
-        # Reassures the originals are safe in the Trash, not lost.
+        # States the observable fact: originals were moved to Trash and the
+        # compact pack is playing them. It must NOT claim the files are "safe"
+        # in Trash — the add-on cannot promise the OS/user won't empty it.
         self.assertIn("trash", lowered)
+        self.assertIn("original", lowered)
         self.assertTrue(
-            "original" in lowered and "safe" in lowered,
-            "must reassure the original audio is safe",
+            "moved" in lowered or "in your" in lowered,
+            "must state the originals were moved to Trash, not that they are safe",
+        )
+        self.assertNotIn(
+            "safe", lowered,
+            "must not promise the originals are 'safe' in Trash — durability there "
+            "is outside the add-on's control",
+        )
+        # Gives the time-sensitive action: restore before emptying Trash /
+        # before rebuilding, so the compact pack keeps a source to fall back on.
+        self.assertIn("loose-audio-originals-v1", message)
+        self.assertTrue(
+            "before" in lowered and ("empty" in lowered or "rebuild" in lowered),
+            "must warn to restore before emptying Trash or rebuilding",
         )
         # Names the exact restore menu path to get maintenance back.
         self.assertIn(
@@ -386,9 +401,16 @@ class CleanupUnavailableMessageTests(unittest.TestCase):
             "reason": "The verified loose audio has already been moved to Trash.",
         }
         message = self.gui._cleanup_unavailable_message(info)
-        self.assertEqual(
-            message, "The verified loose audio has already been moved to Trash."
-        )
+        lowered = message.lower()
+        # Semantic contract, not exact punctuation: an already-completed cleanup
+        # says it is already done, that the verified loose audio is in Trash, and
+        # runs no new action. The provided plain reason is surfaced verbatim.
+        self.assertIn(info["reason"], message)
+        self.assertIn("already", lowered)
+        self.assertIn("trash", lowered)
+        # No jargon and no scary "failed"/"error" wording for this benign state.
+        self.assertNotIn("technical detail", lowered)
+        self.assertNotIn("error", lowered)
 
     def test_missing_reason_uses_generic_plain_text(self) -> None:
         message = self.gui._cleanup_unavailable_message({"eligible": False})

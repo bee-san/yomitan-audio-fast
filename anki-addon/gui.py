@@ -122,7 +122,8 @@ def attempt_init_db_gui() -> None:
             "Local Audio Server left your database and audio pack unchanged at "
             "startup.\n\n"
             "It couldn't safely read the record of your moved audio, so it made no "
-            "changes. Your original audio files are safe in your computer's Trash.\n\n"
+            "changes. Your original audio files were moved to your computer's "
+            "Trash, and the compact audio pack is playing them for now.\n\n"
             f"{_RESTORE_TO_RESUME}\n\n"
             f"Technical detail: {error}"
         )
@@ -141,10 +142,10 @@ def attempt_init_db_gui() -> None:
         if packed_only is not None:
             showWarning(
                 "Local Audio Server can't rebuild its search data right now.\n\n"
-                "Your original audio files are safe in your computer's Trash, and the "
-                "compact audio pack is playing them. The search database is missing, "
-                "and rebuilding it now would leave the pack unusable, so nothing was "
-                "changed.\n\n"
+                "Your original audio files were moved to your computer's Trash, and "
+                "the compact audio pack is playing them. The search database is "
+                "missing, and rebuilding it now would leave the pack unusable, so "
+                "nothing was changed.\n\n"
                 f"{_RESTORE_TO_RESUME}"
             )
             return
@@ -154,12 +155,14 @@ def attempt_init_db_gui() -> None:
             showWarning(
                 "A search-data update is available, but it can't be applied right "
                 "now.\n\n"
-                "Your original audio files are safe in your computer's Trash, and the "
-                "compact audio pack is playing them. The current database and pack "
-                "were kept unchanged.\n\n"
-                "To update, put your original audio back: restore the "
+                "Your original audio files were moved to your computer's Trash, and "
+                "the compact audio pack is playing them. The current database and "
+                "pack were kept unchanged.\n\n"
+                "To update, put your original audio back first: restore the "
                 "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, "
-                f"then run {_RESTORE_MENU_PATH}."
+                f"then run {_RESTORE_MENU_PATH}. Restore before you empty the Trash or "
+                "rebuild the pack, so the pack always has your originals to fall back "
+                "on."
             )
             return
         regenerate_database_operation("Updating local audio database.")
@@ -511,15 +514,19 @@ def _with_detail(guidance: str, error: Exception) -> str:
 
 # Plain-language description of packed-only mode, reused across the maintenance
 # guards. "Packed-only" means the loose original audio was moved to Trash, so the
-# compact audio pack and entries.db are now the only serving copy.
-_ORIGINALS_SAFE_IN_TRASH = (
-    "Your original audio files are safe in your computer's Trash, and the compact "
-    "audio pack is playing them for now."
+# compact audio pack and entries.db are now the only serving copy. We state only
+# the observable fact — the originals were moved to Trash and the pack is playing
+# them — and never claim they are "safe" there, because the add-on cannot control
+# whether the OS, the user, or a storage cleaner later empties the Trash.
+_ORIGINALS_MOVED_TO_TRASH = (
+    "Your original audio files were moved to your computer's Trash, and the "
+    "compact audio pack is playing them for now."
 )
 _RESTORE_TO_RESUME = (
-    "To do this again, put your original audio back: restore the "
-    "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, then run "
-    f"{_RESTORE_MENU_PATH}."
+    "To do this again, put your original audio back first: restore the "
+    "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, then "
+    f"run {_RESTORE_MENU_PATH}. Restore before you empty the Trash or rebuild the "
+    "pack, so the pack always has your originals to fall back on."
 )
 
 
@@ -528,7 +535,7 @@ def _packed_only_block_message(action: str) -> str:
 
     return _with_detail(
         f"Can't {action} right now.\n\n"
-        f"{_ORIGINALS_SAFE_IN_TRASH} Rebuilding or regenerating needs those "
+        f"{_ORIGINALS_MOVED_TO_TRASH} Rebuilding or regenerating needs those "
         "originals back first, so nothing here is changed until you restore them.\n\n"
         f"{_RESTORE_TO_RESUME}",
         Exception("collection is packed-only (packed-only-v1.json present)"),
@@ -556,7 +563,7 @@ def _packed_only_unreadable_message(action: str, detail: str) -> str:
     return (
         f"Can't {action} right now.\n\n"
         "The add-on couldn't safely read the record of your moved audio, so nothing "
-        f"here is changed. {_ORIGINALS_SAFE_IN_TRASH}\n\n"
+        f"here is changed. {_ORIGINALS_MOVED_TO_TRASH}\n\n"
         f"{_RESTORE_TO_RESUME}\n\n"
         f"Technical detail: {detail}"
     )
@@ -758,9 +765,10 @@ def restore_loose_audio_operation(_checked: bool = False) -> None:
         showWarning(
             "Local Audio Server couldn't read the record of your moved audio, so "
             "nothing was changed.\n\n"
-            "Your original audio files are safe in your computer's Trash. Restore the "
-            "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, "
-            "then try again.\n\n"
+            "Your original audio files were moved to your computer's Trash. Restore "
+            "the loose-audio-originals-v1 folder from Trash into "
+            "user_files/fast_audio, then try again. Restore before you empty the "
+            "Trash, so this recovery still has your originals to put back.\n\n"
             f"Technical detail: {error}"
         )
         return
