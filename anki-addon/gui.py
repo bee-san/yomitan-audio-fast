@@ -335,7 +335,13 @@ def maybe_automatic_pack_build(confirm_existing: bool = False) -> None:
         )
     except Exception as error:
         _finish_job()
-        showWarning(f"Could not inspect existing audio for acceleration:\n\n{error}")
+        showWarning(
+            "Local Audio Server couldn't check your existing audio automatically, so "
+            "nothing was changed.\n\n"
+            "You can still build the fast pack yourself from Tools → Local Audio "
+            "Server → Build/rebuild fast desktop audio pack.\n\n"
+            f"Technical detail: {error}"
+        )
         return
     if fingerprint is None:
         _finish_job()
@@ -346,23 +352,23 @@ def maybe_automatic_pack_build(confirm_existing: bool = False) -> None:
             existing = inspect_installed_collection(get_db_path(), ALL_SOURCES)
             previous_status = automatic_pack_build_state(pack_root, fingerprint)
             resuming = previous_status in ("paused", "started")
-            title = "Resume audio migration" if resuming else "Existing audio found"
+            title = "Resume speeding up audio" if resuming else "Existing audio found"
             question = (
-                "A previous migration was paused or interrupted. Resume from its "
-                "saved checkpoint now?"
+                "The last time was paused or interrupted. Continue from where it left "
+                "off now?"
                 if resuming
                 else "Create the fast audio pack now?"
             )
             proceed = askUser(
-                "Local Audio Server found your existing collection automatically.\n\n"
-                f"Mappings: {existing['rows']:,}\n"
-                f"Source folders found: {existing['source_folders']:,} of "
+                "Local Audio Server found your existing audio automatically.\n\n"
+                f"Audio entries: {existing['rows']:,}\n"
+                f"Audio folders found: {existing['source_folders']:,} of "
                 f"{existing['database_sources']:,}\n\n"
-                f"{question} No picker or file copy is needed. Nothing will be "
-                "moved or deleted, and you can pause/resume the build.\n\n"
-                "Choosing No stops this prompt for this database/source setup; start "
-                "it later from Tools → Local Audio Server → Build/rebuild fast "
-                "desktop audio pack.",
+                f"{question} You don't need to pick a folder or copy anything. Nothing "
+                "will be moved or deleted, and you can pause and continue anytime.\n\n"
+                "Choosing No stops this prompt for this audio setup; you can start it "
+                "later from Tools → Local Audio Server → Build/rebuild fast desktop "
+                "audio pack.",
                 title=title,
                 defaultno=False,
             )
@@ -373,7 +379,13 @@ def maybe_automatic_pack_build(confirm_existing: bool = False) -> None:
                 )
             finally:
                 _finish_job()
-            showWarning(f"Could not validate the detected audio collection:\n\n{error}")
+            showWarning(
+                "Local Audio Server couldn't confirm the audio it found, so nothing "
+                "was changed.\n\n"
+                "You can still build the fast pack yourself from Tools → Local Audio "
+                "Server → Build/rebuild fast desktop audio pack.\n\n"
+                f"Technical detail: {error}"
+            )
             return
         if not proceed:
             try:

@@ -95,7 +95,7 @@ class ImportDialogTests(unittest.TestCase):
             selected = Path(temporary)
 
             def reject(_path):
-                raise ValueError("entries.db is corrupt")
+                raise ValueError("entries.db quick_check failed: malformed")
 
             dialog = self.dialog_module.ExistingAudioDropDialog(
                 None, selected, reject
@@ -103,7 +103,25 @@ class ImportDialogTests(unittest.TestCase):
             dialog._select(selected)
             self.assertFalse(dialog.accepted)
             self.assertIsNone(dialog.selected_path)
-            self.assertIn("entries.db is corrupt", dialog._label.text)
+            text = dialog._label.text
+            lowered = text.lower()
+            # Leads with plain language, not the raw quick_check jargon.
+            self.assertTrue(
+                lowered.startswith("that folder")
+                or lowered.startswith("this folder"),
+                f"label should lead plainly, got: {text!r}",
+            )
+            self.assertNotIn("quick_check", text.split("Details")[0])
+            # Tells the user what to do next.
+            self.assertIn("another folder", lowered)
+            # Preserves the exact reason for support, after the plain guidance.
+            self.assertIn("entries.db quick_check failed: malformed", text)
+            self.assertIn("Details", text)
+            self.assertLess(
+                text.index("Details"),
+                text.index("quick_check"),
+                "raw reason must come after the plain guidance",
+            )
 
     def test_valid_directory_accepts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
