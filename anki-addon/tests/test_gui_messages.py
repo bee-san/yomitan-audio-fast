@@ -307,5 +307,55 @@ class OperationFailedMessageTests(unittest.TestCase):
         self.assertIn("quick_check failed: malformed", message)
 
 
+class DestructiveConfirmCopyTests(unittest.TestCase):
+    """The Trash-move confirmation is high-risk; its copy must stay plain and safe."""
+
+    def setUp(self) -> None:
+        self.warnings: list[str] = []
+        self.infos: list[str] = []
+        self.gui = _load_gui(self.warnings, self.infos)
+
+    def _capture_prompt(self, info: dict) -> str:
+        captured: dict = {}
+
+        def fake_ask(text, *args, **kwargs):
+            captured["text"] = text
+            return False  # decline so no work runs
+
+        fake_send2trash = types.ModuleType("send2trash")
+        fake_send2trash.send2trash = lambda *a, **k: None
+        with patch.dict(sys.modules, {"send2trash": fake_send2trash}), \
+                patch.object(self.gui, "askUser", fake_ask), \
+                patch.object(self.gui, "inspect_managed_cleanup", return_value=info), \
+                patch.object(self.gui, "get_db_path", lambda: __import__("pathlib").Path(".")), \
+                patch.object(self.gui, "get_program_root_path", lambda: __import__("pathlib").Path(".")):
+            self.gui.remove_loose_audio_operation()
+        return captured.get("text", "")
+
+    def test_move_prompt_is_plain_and_preserves_safety_facts(self) -> None:
+        info = {
+            "eligible": True,
+            "status": "ready",
+            "moved_files": 0,
+            "moved_bytes": 0,
+            "files": 500,
+            "bytes": 1024 ** 3,
+        }
+        prompt = self._capture_prompt(info)
+        lowered = prompt.lower()
+        # No raw jargon in the confirmation an ordinary user reads before deleting.
+        self.assertNotIn("sha-256", lowered)
+        self.assertNotIn("byte-compare", lowered)
+        self.assertNotIn("entries.db", lowered)
+        self.assertNotIn("unreferenced", lowered)
+        # Plain reassurance the app double-checks and only touches its own audio.
+        self.assertIn("trash", lowered)
+        self.assertTrue("double-check" in lowered or "double check" in lowered)
+        self.assertTrue("left alone" in lowered or "leaves" in lowered or "left" in lowered)
+        # Still tells the user the count/size and that No is the safe default.
+        self.assertIn("500", prompt)
+        self.assertIn("safest", lowered)
+
+
 if __name__ == "__main__":
     unittest.main()
