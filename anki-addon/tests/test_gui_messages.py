@@ -357,5 +357,43 @@ class DestructiveConfirmCopyTests(unittest.TestCase):
         self.assertIn("safest", lowered)
 
 
+class CleanupUnavailableMessageTests(unittest.TestCase):
+    """The 'nothing to clean up' info dialog should stay plain for error states."""
+
+    def setUp(self) -> None:
+        self.warnings: list[str] = []
+        self.infos: list[str] = []
+        self.gui = _load_gui(self.warnings, self.infos)
+
+    def test_error_state_leads_plain_with_technical_detail(self) -> None:
+        info = {
+            "eligible": False,
+            "status": "unavailable",
+            "reason": "The active pack is missing its SHA-256 integrity sidecar.",
+        }
+        message = self.gui._cleanup_unavailable_message(info)
+        lowered = message.lower()
+        # Plain lead, jargon only under technical detail.
+        self.assertTrue(lowered.startswith("cleanup isn't available"))
+        self.assertNotIn("sha-256", lowered.split("technical detail")[0])
+        self.assertIn("Technical detail", message)
+        self.assertIn("SHA-256 integrity sidecar", message)
+
+    def test_plain_reason_is_shown_as_is(self) -> None:
+        info = {
+            "eligible": False,
+            "status": "completed",
+            "reason": "The verified loose audio has already been moved to Trash.",
+        }
+        message = self.gui._cleanup_unavailable_message(info)
+        self.assertEqual(
+            message, "The verified loose audio has already been moved to Trash."
+        )
+
+    def test_missing_reason_uses_generic_plain_text(self) -> None:
+        message = self.gui._cleanup_unavailable_message({"eligible": False})
+        self.assertIn("nothing", message.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

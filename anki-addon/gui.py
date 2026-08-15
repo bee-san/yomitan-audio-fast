@@ -573,6 +573,28 @@ def _pack_coverage_line(missing_files: int) -> str:
     )
 
 
+# Cleanup-eligibility statuses whose reason text is already plain, user-facing copy
+# built by inspect_managed_cleanup. Error statuses instead carry a raw exception.
+_PLAIN_CLEANUP_STATUSES = {"completed", "recovery-required", "started", "paused"}
+
+
+def _cleanup_unavailable_message(info: dict) -> str:
+    """Plain 'nothing to clean up' copy; raw error reasons become technical detail."""
+
+    reason = info.get("reason") or ""
+    status = info.get("status")
+    if not reason:
+        return "There's nothing to clean up right now."
+    if status in _PLAIN_CLEANUP_STATUSES:
+        return reason
+    return (
+        "Cleanup isn't available right now, so nothing was changed.\n\n"
+        "Your audio is still there. Building and activating a complete fast pack "
+        "usually makes cleanup available.\n\n"
+        f"Technical detail: {reason}"
+    )
+
+
 def _cleanup_stop_message(error: Exception) -> str:
     """Build calm, actionable copy for a cleanup safety stop.
 
@@ -645,7 +667,7 @@ def remove_loose_audio_operation(
         )
     if not info.get("eligible"):
         if not quiet_unavailable:
-            showInfo(info.get("reason") or "There is no verified audio ready to clean up yet.")
+            showInfo(_cleanup_unavailable_message(info))
         return
     try:
         from send2trash import send2trash
