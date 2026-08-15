@@ -167,5 +167,103 @@ class CleanupFailureMessageTests(unittest.TestCase):
         self.assertIn("Technical detail", message)
 
 
+class PackedOnlyBlockMessageTests(unittest.TestCase):
+    """Plain-language copy for the packed-only maintenance guards.
+
+    These dialogs previously led with implementation terms (``packed-only-v1.json``,
+    ``loose-audio-originals-v1``, "cleanup journal", "invalidate"). An ordinary user
+    should first read what state their audio is in and exactly what to do, with the
+    filenames preserved afterwards as technical detail for support.
+    """
+
+    def setUp(self) -> None:
+        self.warnings: list[str] = []
+        self.infos: list[str] = []
+        self.gui = _load_gui(self.warnings, self.infos)
+
+    def _assert_plain_first(self, message: str, jargon: str) -> None:
+        lowered = message.lower()
+        # If a jargon token appears at all, it must live in the technical detail,
+        # never in the leading guidance an ordinary user reads first.
+        if jargon.lower() in lowered:
+            self.assertIn("Technical detail", message)
+            self.assertLess(
+                message.index("Technical detail"),
+                lowered.index(jargon.lower()) + 1,
+                f"{jargon!r} must appear only after the technical-detail marker",
+            )
+
+    def test_packed_only_active_block_leads_with_plain_language(self) -> None:
+        message = self.gui._packed_only_block_message("rebuild the audio pack")
+        lines = message.splitlines()
+        headline = lines[0].lower()
+        # Plain headline naming the blocked action, no raw filename.
+        self.assertIn("rebuild the audio pack", headline)
+        self.assertNotIn("packed-only", headline)
+        self.assertNotIn(".json", headline)
+        lowered = message.lower()
+        # Reassures the originals are safe in the Trash, not lost.
+        self.assertIn("trash", lowered)
+        self.assertTrue(
+            "original" in lowered and "safe" in lowered,
+            "must reassure the original audio is safe",
+        )
+        # Names the exact restore menu path to get maintenance back.
+        self.assertIn(
+            "Tools → Local Audio Server → Restore/verify loose audio originals",
+            message,
+        )
+        # The internal filename is preserved for support, after the guidance.
+        self._assert_plain_first(message, "packed-only-v1.json")
+
+    def test_missing_journal_block_avoids_jargon_headline(self) -> None:
+        message = self.gui._quarantine_without_journal_message("rebuild the audio pack")
+        lowered = message.lower()
+        self.assertTrue(lowered.startswith("can't rebuild the audio pack") or
+                        lowered.startswith("cannot rebuild the audio pack"))
+        # No "journal" in the plain guidance; reassure nothing was rebuilt/removed.
+        self.assertNotIn("journal", message.split("Technical detail")[0].lower())
+        self.assertTrue("nothing" in lowered)
+        self.assertIn(
+            "Tools → Local Audio Server → Restore/verify loose audio originals",
+            message,
+        )
+
+    def test_packed_only_state_unreadable_leads_plain(self) -> None:
+        message = self.gui._packed_only_unreadable_message(
+            "rebuild the audio pack", "packed-only-v1.json is not valid JSON"
+        )
+        lowered = message.lower()
+        self.assertTrue(lowered.startswith("can't") or lowered.startswith("cannot"))
+        # Original detail preserved after guidance.
+        self.assertIn("packed-only-v1.json is not valid JSON", message)
+        self._assert_plain_first(message, "packed-only-v1.json is not valid json")
+        self.assertIn("Restore/verify loose audio originals", message)
+
+
+class SuccessProgressCopyTests(unittest.TestCase):
+    """Success and coverage copy should be understandable to ordinary users."""
+
+    def setUp(self) -> None:
+        self.warnings: list[str] = []
+        self.infos: list[str] = []
+        self.gui = _load_gui(self.warnings, self.infos)
+
+    def test_full_coverage_line_is_plain(self) -> None:
+        line = self.gui._pack_coverage_line(missing_files=0)
+        lowered = line.lower()
+        self.assertIn("every", lowered)
+        self.assertNotIn("mapping", lowered)  # avoid the "mapping" jargon
+        self.assertIn("original", lowered)
+
+    def test_partial_coverage_line_explains_plainly(self) -> None:
+        line = self.gui._pack_coverage_line(missing_files=1234)
+        lowered = line.lower()
+        self.assertIn("1,234", line)
+        # Explains what "missing" means without the loose-file cleanup jargon headline.
+        self.assertTrue("could not be found" in lowered or "were missing" in lowered)
+        self.assertIn("trash", lowered)  # references that Trash cleanup is unavailable
+
+
 if __name__ == "__main__":
     unittest.main()

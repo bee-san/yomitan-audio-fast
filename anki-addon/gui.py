@@ -104,39 +104,47 @@ def attempt_init_db_gui() -> None:
         packed_only = load_packed_only_state(pack_root)
     except PackedOnlyStateError as error:
         showWarning(
-            f"Local Audio Server maintenance is blocked:\n\n{error}\n\n"
-            "The current database and pack were left unchanged. Restore "
-            "loose-audio-originals-v1 from Trash, then run Restore/verify loose "
-            "audio originals."
+            "Local Audio Server left your database and audio pack unchanged at "
+            "startup.\n\n"
+            "It couldn't safely read the record of your moved audio, so it made no "
+            "changes. Your original audio files are safe in your computer's Trash.\n\n"
+            f"{_RESTORE_TO_RESUME}\n\n"
+            f"Technical detail: {error}"
         )
         return
     if packed_only is None and protected_cleanup_state_exists(pack_root):
         showWarning(
-            "Local Audio Server maintenance is blocked because protected "
-            "loose-audio quarantine exists without its cleanup journal.\n\n"
-            "Nothing was rebuilt or removed. Inspect "
-            "user_files/fast_audio/loose-audio-originals-v1 and restore its "
-            "audio before continuing."
+            "Local Audio Server made no changes at startup.\n\n"
+            "Nothing was rebuilt or removed. A protected copy of your original audio "
+            "is set aside, but the record of what was moved is missing, so the add-on "
+            "won't risk rebuilding from an incomplete set.\n\n"
+            "Check the user_files/fast_audio/loose-audio-originals-v1 folder and put "
+            "your original audio back before continuing."
         )
         return
     if not table_exists_and_has_data():
         if packed_only is not None:
             showWarning(
-                "The loose audio originals were moved to Trash, but entries.db is "
-                "missing or empty. Automatic regeneration is blocked so the sole "
-                "verified pack is not invalidated. Restore the original cleanup "
-                "folder from Trash, then run Restore/verify loose audio "
-                "originals."
+                "Local Audio Server can't rebuild its search data right now.\n\n"
+                "Your original audio files are safe in your computer's Trash, and the "
+                "compact audio pack is playing them. The search database is missing, "
+                "and rebuilding it now would leave the pack unusable, so nothing was "
+                "changed.\n\n"
+                f"{_RESTORE_TO_RESUME}"
             )
             return
         regenerate_database_operation()
     elif table_must_be_updated():
         if packed_only is not None:
             showWarning(
-                "A database update is available, but the loose audio originals were "
-                "moved to Trash. The current database and verified pack were kept "
-                "unchanged. Restore the cleanup folder from Trash, then run "
-                "Restore/verify loose audio originals before updating."
+                "A search-data update is available, but it can't be applied right "
+                "now.\n\n"
+                "Your original audio files are safe in your computer's Trash, and the "
+                "compact audio pack is playing them. The current database and pack "
+                "were kept unchanged.\n\n"
+                "To update, put your original audio back: restore the "
+                "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, "
+                f"then run {_RESTORE_MENU_PATH}."
             )
             return
         regenerate_database_operation("Updating local audio database.")
@@ -169,26 +177,14 @@ def _packed_only_blocks_maintenance(action: str) -> bool:
     try:
         state = load_packed_only_state(pack_root)
     except PackedOnlyStateError as error:
-        showWarning(f"Cannot {action}:\n\n{error}")
+        showWarning(_packed_only_unreadable_message(action, str(error)))
         return True
     if state is None and not protected_cleanup_state_exists(pack_root):
         return False
     if state is None:
-        showWarning(
-            f"Cannot {action} while protected loose-audio quarantine exists.\n\n"
-            "The cleanup journal is missing, so maintenance is blocked to avoid "
-            "building from a partial collection. Inspect "
-            "user_files/fast_audio/loose-audio-originals-v1 and restore the "
-            "journal or audio before continuing."
-        )
+        showWarning(_quarantine_without_journal_message(action))
         return True
-    showWarning(
-        f"Cannot {action} while this collection is packed-only.\n\n"
-        "The verified pack and entries.db are now the serving copy because the "
-        "loose audio was moved to Trash. Restore loose-audio-originals-v1 from "
-        "Trash into user_files/fast_audio, then run Restore/verify loose audio "
-        "originals before maintenance."
-    )
+    showWarning(_packed_only_block_message(action))
     return True
 
 
@@ -290,18 +286,11 @@ def build_fast_pack_action(progress=None) -> dict:
 
 def build_fast_pack_success(started: float, result: dict) -> None:
     elapsed = time.perf_counter() - started
-    coverage = (
-        "Every mapping is packed. Your loose originals are still in place."
-        if result["missing_files"] == 0
-        else (
-            f"{result['missing_files']:,} source files were missing or invalid, so "
-            "loose-file cleanup is unavailable."
-        )
-    )
+    coverage = _pack_coverage_line(result["missing_files"])
     showInfo(
         "Fast desktop audio pack is active.\n\n"
         f"Version: {result['version']}\n"
-        f"Audio mappings packed: {result['valid_rows']:,}\n"
+        f"Audio files packed: {result['valid_rows']:,}\n"
         f"Pack size: {result['pack_bytes'] / (1024 ** 3):.2f} GiB\n"
         f"Build time: {elapsed:.1f} seconds\n\n"
         f"{coverage}"
@@ -317,12 +306,21 @@ def maybe_automatic_pack_build(confirm_existing: bool = False) -> None:
         if load_packed_only_state(pack_root) is not None:
             return
     except PackedOnlyStateError as error:
-        showWarning(f"Could not inspect packed-only state:\n\n{error}")
+        showWarning(
+            "Local Audio Server couldn't check your audio automatically, so nothing "
+            "was changed.\n\n"
+            "You can still build the fast pack yourself from Tools → Local Audio "
+            "Server → Build/rebuild fast desktop audio pack.\n\n"
+            f"Technical detail: {error}"
+        )
         return
     if protected_cleanup_state_exists(pack_root):
         showWarning(
-            "Automatic audio migration is blocked because protected cleanup "
-            "quarantine exists without a valid journal."
+            "Local Audio Server didn't speed up your audio automatically.\n\n"
+            "A protected copy of your original audio is set aside, but the record of "
+            "what was moved is missing, so the add-on won't build from an incomplete "
+            "set. Nothing was changed.\n\n"
+            f"{_RESTORE_TO_RESUME}"
         )
         return
     runtime = get_runtime()
@@ -482,6 +480,70 @@ def _with_detail(guidance: str, error: Exception) -> str:
     """
 
     return f"{guidance}\n\nTechnical detail: {error}"
+
+
+# Plain-language description of packed-only mode, reused across the maintenance
+# guards. "Packed-only" means the loose original audio was moved to Trash, so the
+# compact audio pack and entries.db are now the only serving copy.
+_ORIGINALS_SAFE_IN_TRASH = (
+    "Your original audio files are safe in your computer's Trash, and the compact "
+    "audio pack is playing them for now."
+)
+_RESTORE_TO_RESUME = (
+    "To do this again, put your original audio back: restore the "
+    "loose-audio-originals-v1 folder from Trash into user_files/fast_audio, then run "
+    f"{_RESTORE_MENU_PATH}."
+)
+
+
+def _packed_only_block_message(action: str) -> str:
+    """Explain, in plain language, why maintenance is paused in packed-only mode."""
+
+    return _with_detail(
+        f"Can't {action} right now.\n\n"
+        f"{_ORIGINALS_SAFE_IN_TRASH} Rebuilding or regenerating needs those "
+        "originals back first, so nothing here is changed until you restore them.\n\n"
+        f"{_RESTORE_TO_RESUME}",
+        Exception("collection is packed-only (packed-only-v1.json present)"),
+    )
+
+
+def _quarantine_without_journal_message(action: str) -> str:
+    """Explain a blocked action when the protected copy exists but its record is gone."""
+
+    return _with_detail(
+        f"Can't {action} right now.\n\n"
+        "Nothing was rebuilt or removed. A protected copy of your original audio is "
+        "still set aside, but the record of what was moved is missing, so the add-on "
+        "won't risk rebuilding from an incomplete set.\n\n"
+        f"{_RESTORE_TO_RESUME}",
+        Exception(
+            "protected loose-audio quarantine exists without its cleanup journal"
+        ),
+    )
+
+
+def _packed_only_unreadable_message(action: str, detail: str) -> str:
+    """Explain a blocked action when packed-only state could not be read."""
+
+    return (
+        f"Can't {action} right now.\n\n"
+        "The add-on couldn't safely read the record of your moved audio, so nothing "
+        f"here is changed. {_ORIGINALS_SAFE_IN_TRASH}\n\n"
+        f"{_RESTORE_TO_RESUME}\n\n"
+        f"Technical detail: {detail}"
+    )
+
+
+def _pack_coverage_line(missing_files: int) -> str:
+    """Plain-language summary of how completely the pack covers your audio."""
+
+    if missing_files == 0:
+        return "Every audio file is packed, and your originals are still in place."
+    return (
+        f"{missing_files:,} audio files could not be found or read, so moving loose "
+        "originals to Trash isn't available for this pack."
+    )
 
 
 def _cleanup_stop_message(error: Exception) -> str:
