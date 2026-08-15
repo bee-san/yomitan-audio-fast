@@ -91,7 +91,8 @@ struct InfoResponse {
 pub async fn serve(options: ServeOptions) -> Result<()> {
     ensure!(
         options.host.is_loopback(),
-        "refusing to bind non-loopback address {}",
+        "the audio server only listens on a loopback address (127.0.0.1 or ::1); \
+         set --host to 127.0.0.1 and retry (requested {})",
         options.host
     );
     let bundle = Arc::new(Bundle::open(&options.bundle_root, options.verify_index)?);
@@ -106,7 +107,10 @@ pub async fn serve(options: ServeOptions) -> Result<()> {
             })?))
         }
         (AssetMode::Files, None) => {
-            anyhow::bail!("--legacy-root is required with --asset-mode files")
+            anyhow::bail!(
+                "--asset-mode files needs --legacy-root pointing at the folder \
+                 that holds the original audio files"
+            )
         }
     };
     let listener = TcpListener::bind(SocketAddr::new(options.host, options.port))
@@ -337,7 +341,8 @@ async fn play(
         Ok(None) => {
             return error_response(
                 StatusCode::NOT_FOUND,
-                "no audio candidate",
+                "no audio was found for that term and reading; \
+                 try a different reading or check your configured sources",
                 method == Method::HEAD,
             );
         }
@@ -369,7 +374,8 @@ async fn audio_by_id(
     if version != state.engine.bundle().manifest.bundle_version {
         return error_response(
             StatusCode::NOT_FOUND,
-            "unknown bundle version",
+            "that audio link is from an older bundle version; \
+             request a fresh audio URL from a lookup and retry",
             method == Method::HEAD,
         );
     }
@@ -378,7 +384,8 @@ async fn audio_by_id(
         Err(_) => {
             return error_response(
                 StatusCode::NOT_FOUND,
-                "unknown audio ID",
+                "that audio ID is not in this bundle; \
+                 request a fresh audio URL from a lookup and retry",
                 method == Method::HEAD,
             );
         }
@@ -612,7 +619,12 @@ async fn preflight() -> Response<Body> {
 }
 
 async fn not_found(method: Method) -> Response<Body> {
-    error_response(StatusCode::NOT_FOUND, "not found", method == Method::HEAD)
+    error_response(
+        StatusCode::NOT_FOUND,
+        "unknown request path; use / with a 'term' query, or \
+         /v1/play, /v1/candidates, /v1/info, or /healthz",
+        method == Method::HEAD,
+    )
 }
 
 fn json_response<T: Serialize>(value: &T, head: bool) -> Response<Body> {

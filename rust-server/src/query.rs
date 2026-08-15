@@ -273,7 +273,10 @@ fn optional_text_cmp(left: Option<&str>, right: Option<&str>) -> Ordering {
 
 pub fn parse_query(raw: Option<&str>) -> Result<QueryInput> {
     let raw = raw.unwrap_or_default();
-    ensure!(raw.len() <= 8_192, "query string exceeds 8192 bytes");
+    ensure!(
+        raw.len() <= 8_192,
+        "the query string is too long; use at most 8192 bytes"
+    );
     let mut term = None;
     let mut expression = None;
     let mut reading = None;
@@ -296,24 +299,36 @@ pub fn parse_query(raw: Option<&str>) -> Result<QueryInput> {
             _ => {}
         }
     }
-    let term = term
-        .or(expression)
-        .ok_or_else(|| anyhow!("missing term or expression query parameter"))?;
-    ensure!(term.len() <= 1_024, "term exceeds 1024 UTF-8 bytes");
+    let term = term.or(expression).ok_or_else(|| {
+        anyhow!("add a 'term' (or 'expression') query parameter naming the word to look up")
+    })?;
+    ensure!(
+        term.len() <= 1_024,
+        "the 'term' is too long; use at most 1024 UTF-8 bytes"
+    );
     if let Some(value) = &reading {
-        ensure!(value.len() <= 1_024, "reading exceeds 1024 UTF-8 bytes");
-    }
-    if let Some(values) = &sources {
-        ensure!(values.len() <= 32, "more than 32 sources requested");
         ensure!(
-            values.iter().all(|value| value.len() <= 128),
-            "source ID exceeds 128 bytes"
+            value.len() <= 1_024,
+            "the 'reading' is too long; use at most 1024 UTF-8 bytes"
         );
     }
-    ensure!(users.len() <= 128, "more than 128 users requested");
+    if let Some(values) = &sources {
+        ensure!(
+            values.len() <= 32,
+            "too many 'sources' filters; list at most 32"
+        );
+        ensure!(
+            values.iter().all(|value| value.len() <= 128),
+            "a 'sources' value is too long; use at most 128 bytes each"
+        );
+    }
+    ensure!(
+        users.len() <= 128,
+        "too many 'user' filters; list at most 128"
+    );
     ensure!(
         users.iter().all(|value| value.len() <= 256),
-        "user exceeds 256 bytes"
+        "a 'user' value is too long; use at most 256 bytes each"
     );
     Ok(QueryInput {
         term,
