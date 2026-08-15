@@ -54,6 +54,24 @@ class PackedOnlyStateError(CleanupSafetyError):
     """A packed-only marker exists but cannot be trusted."""
 
 
+class LooseAudioChangedError(CleanupSafetyError):
+    """A loose or restored audio file changed while it was being verified.
+
+    Raised only when a file's identity/size shifts mid-hash, which usually means
+    another program, sync service, or copy is touching the folder. The presentation
+    layer uses this type to reassure the user that nothing was deleted and to point
+    at the folder-stability cause rather than at an internal invariant.
+    """
+
+
+class PackMismatchError(CleanupSafetyError):
+    """Loose or staged audio no longer matches the verified pack byte-for-byte.
+
+    The presentation layer uses this type to explain that the original was kept and
+    that the fast pack should be rebuilt from the current files before retrying.
+    """
+
+
 @dataclass(frozen=True)
 class _AudioGroup:
     source: str
@@ -668,7 +686,7 @@ def _scan_plan(
                     missing += 1
                 else:
                     if state.size != first_audio.length:
-                        raise CleanupSafetyError(
+                        raise PackMismatchError(
                             f"loose audio size no longer matches the pack: {candidate}"
                         )
                     present_bytes += state.size
@@ -728,7 +746,7 @@ def _compare_with_pack(
             opened_state_value.st_ctime_ns,
         )
         if opened_state != expected_state or not stat.S_ISREG(opened_state.mode):
-            raise CleanupSafetyError(f"loose audio changed during verification: {path}")
+            raise LooseAudioChangedError(f"loose audio changed during verification: {path}")
         position = 0
         digest = hashlib.sha256()
         with os.fdopen(descriptor, "rb", closefd=False) as file:
@@ -748,7 +766,7 @@ def _compare_with_pack(
                 packed = pack.view(audio, position, length)
                 try:
                     if len(loose) != length or loose != packed.tobytes():
-                        raise CleanupSafetyError(
+                        raise PackMismatchError(
                             f"loose audio bytes no longer match the verified pack: {path}"
                         )
                 finally:
@@ -764,7 +782,7 @@ def _compare_with_pack(
             final_value.st_ctime_ns,
         )
         if final_state != expected_state:
-            raise CleanupSafetyError(f"loose audio changed during verification: {path}")
+            raise LooseAudioChangedError(f"loose audio changed during verification: {path}")
         return digest.hexdigest()
     finally:
         os.close(descriptor)
@@ -963,7 +981,7 @@ def _create_cleanup_inventory(
                                 "pack records"
                             )
                     if first_audio is None or state.size != first_audio.length:
-                        raise CleanupSafetyError(
+                        raise PackMismatchError(
                             f"loose audio no longer matches the pack: {candidate}"
                         )
                     digest = _compare_with_pack(
@@ -1129,7 +1147,7 @@ def _hash_regular_file(
             before.size,
             before.mtime_ns,
         ):
-            raise CleanupSafetyError(f"restored audio changed during verification: {path}")
+            raise LooseAudioChangedError(f"restored audio changed during verification: {path}")
         return digest.hexdigest()
     finally:
         os.close(descriptor)
@@ -1201,7 +1219,7 @@ def _stage_verified_files(
                         )
                     audio = pack.get(group.row_ids[0])
                     if audio is None or staged_state.size != audio.length:
-                        raise CleanupSafetyError(
+                        raise PackMismatchError(
                             f"protected staged audio no longer matches the pack: {staged}"
                         )
                     _compare_with_pack(
@@ -1236,7 +1254,7 @@ def _stage_verified_files(
                     )
                 audio = pack.get(group.row_ids[0])
                 if audio is None or original_state.size != audio.length:
-                    raise CleanupSafetyError(
+                    raise PackMismatchError(
                         f"pack no longer matches loose audio: {original}"
                     )
                 _compare_with_pack(
@@ -1404,7 +1422,7 @@ def _verify_stage_inventory(
                 )
             audio = pack.get(group.row_ids[0])
             if audio is None or staged_state.size != audio.length:
-                raise CleanupSafetyError(
+                raise PackMismatchError(
                     f"protected staged audio no longer matches the pack: {staged}"
                 )
             _compare_with_pack(

@@ -14,6 +14,8 @@ from aqt.qt import QAction, qconnect
 from aqt.utils import askUser, showInfo, showWarning
 
 from .cleanup import (
+    LooseAudioChangedError,
+    PackMismatchError,
     PackedOnlyStateError,
     inspect_managed_cleanup,
     load_packed_only_state,
@@ -459,19 +461,85 @@ def _cleanup_failure(error: Exception, progress, *, restoring: bool = False) -> 
         )
         return
     if restoring:
-        showWarning(
-            f"Loose-audio restore stopped safely:\n\n{error}\n\n"
-            "The packed-only guard was retained. Fix or restore the protected "
-            "cleanup folder, then run Tools → Local Audio Server → "
-            "Restore/verify loose audio originals… again."
-        )
+        showWarning(_restore_stop_message(error))
         return
-    showWarning(
-        f"Loose-audio cleanup stopped safely:\n\n{error}\n\n"
-        "No permanent-delete fallback was used. If protected quarantine is still "
-        "local, resume from Tools → Local Audio Server → Move verified loose "
-        "audio to Trash… If it reached Trash, restore "
-        "loose-audio-originals-v1 and use Restore/verify loose audio originals…"
+    showWarning(_cleanup_stop_message(error))
+
+
+# The exact Tools menu paths the user must follow to resume; kept verbatim so the
+# copy matches the menu labels documented in the README and built in init_gui().
+_CLEANUP_MENU_PATH = "Tools → Local Audio Server → Move verified loose audio to Trash…"
+_RESTORE_MENU_PATH = (
+    "Tools → Local Audio Server → Restore/verify loose audio originals…"
+)
+
+
+def _with_detail(guidance: str, error: Exception) -> str:
+    """Append the raw exception as optional technical detail after the guidance.
+
+    The friendly guidance always leads; the invariant text (including any filename)
+    is preserved for diagnostics but never becomes the headline.
+    """
+
+    return f"{guidance}\n\nTechnical detail: {error}"
+
+
+def _cleanup_stop_message(error: Exception) -> str:
+    """Build calm, actionable copy for a cleanup safety stop.
+
+    Every branch leads with what happened in plain language, states prominently that
+    nothing was permanently deleted, and names the exact menu action to retry after
+    the folder is stable. The raw exception is preserved as technical detail.
+    """
+
+    if isinstance(error, LooseAudioChangedError):
+        return _with_detail(
+            "Cleanup stopped because an audio file changed.\n\n"
+            "Nothing was permanently deleted. The verified pack and your loose "
+            "originals were all kept.\n\n"
+            "Another program, sync service, or file copy may be changing the audio "
+            "folder. Close or pause it so the files stay still, then run "
+            f"{_CLEANUP_MENU_PATH} again.",
+            error,
+        )
+    if isinstance(error, PackMismatchError):
+        return _with_detail(
+            "Cleanup stopped because the audio no longer matches the verified pack.\n\n"
+            "Nothing was permanently deleted, and the loose original was kept.\n\n"
+            "Rebuild the fast pack from the current files, test playback, then run "
+            f"{_CLEANUP_MENU_PATH} again.",
+            error,
+        )
+    return _with_detail(
+        "Cleanup stopped to protect your audio.\n\n"
+        "Nothing was permanently deleted. If loose-audio-originals-v1 is still in "
+        "user_files/fast_audio, run "
+        f"{_CLEANUP_MENU_PATH} again. If it already reached Trash, restore it and "
+        f"use {_RESTORE_MENU_PATH}.",
+        error,
+    )
+
+
+def _restore_stop_message(error: Exception) -> str:
+    """Build calm, actionable copy for a restore/verify safety stop."""
+
+    if isinstance(error, LooseAudioChangedError):
+        return _with_detail(
+            "Restore stopped because an audio file changed.\n\n"
+            "No existing file was overwritten, and the packed-only safeguard is still "
+            "active.\n\n"
+            "Another program, sync service, or file copy may be changing the audio "
+            "folder. Close or pause it, then run "
+            f"{_RESTORE_MENU_PATH} again.",
+            error,
+        )
+    return _with_detail(
+        "Restore stopped to protect your audio.\n\n"
+        "No existing file was overwritten, and the packed-only safeguard is still "
+        "active.\n\n"
+        "Fix or restore the protected cleanup folder, then run "
+        f"{_RESTORE_MENU_PATH} again.",
+        error,
     )
 
 

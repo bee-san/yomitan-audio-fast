@@ -279,6 +279,56 @@ class CleanupTests(unittest.TestCase):
         self.assertTrue(self.first.is_file())
         self.assertTrue(self.second.is_file())
 
+    def test_byte_mismatch_raises_pack_mismatch_error_and_trashes_nothing(self) -> None:
+        # Same-length bytes so the size check passes and the byte compare fires.
+        self.first.write_bytes(bytes(len(self.first_bytes)))
+        with self.assertRaises(cleanup.PackMismatchError) as caught:
+            cleanup.trash_verified_loose_audio(
+                self.db_path,
+                self.pack_root,
+                self.sources,
+                self.program_root,
+                self.trash,
+            )
+        # The classified type still carries the exact diagnostic text.
+        self.assertIn("no longer match the verified pack", str(caught.exception))
+        self.assertTrue(self.first.is_file())
+        self.assertTrue(self.second.is_file())
+        self.assertEqual(list(self.trash_root.iterdir()), [])
+
+    def test_file_changing_mid_verification_raises_loose_audio_changed_and_trashes_nothing(
+        self,
+    ) -> None:
+        # Simulate another process mutating the file between the open-time stat and
+        # the completion stat inside _compare_with_pack: the second fstat returns a
+        # different size, which the safety path must treat as "changed".
+        real_fstat = cleanup.os.fstat
+        calls = {"count": 0}
+
+        def shifting_fstat(descriptor):
+            calls["count"] += 1
+            value = real_fstat(descriptor)
+            # First call establishes the opened state; a later call reports a change.
+            if calls["count"] >= 3:
+                fields = list(value)
+                fields[6] += 1  # st_size lives at index 6 of os.stat_result
+                return os.stat_result(fields)
+            return value
+
+        with patch.object(cleanup.os, "fstat", side_effect=shifting_fstat):
+            with self.assertRaises(cleanup.LooseAudioChangedError) as caught:
+                cleanup.trash_verified_loose_audio(
+                    self.db_path,
+                    self.pack_root,
+                    self.sources,
+                    self.program_root,
+                    self.trash,
+                )
+        self.assertIn("changed during verification", str(caught.exception))
+        self.assertTrue(self.first.is_file())
+        self.assertTrue(self.second.is_file())
+        self.assertEqual(list(self.trash_root.iterdir()), [])
+
     def test_normalized_database_path_aliases_block_cleanup(self) -> None:
         nested = self.source_root / "nested"
         nested.mkdir()
