@@ -31,6 +31,64 @@ server_module = importlib.import_module(f"{PACKAGE}.server")
 
 
 class AnkiLifecycleTests(unittest.TestCase):
+    def test_installing_this_addon_stops_the_server_before_files_move(self) -> None:
+        package = "_local_audio_fast_installed_lifecycle_test_addon"
+        hooks = []
+        starts = []
+        stops = []
+        gui_starts = []
+        metadata = {"update_enabled": False}
+        fake_aqt = types.ModuleType("aqt")
+        fake_aqt.gui_hooks = types.SimpleNamespace(
+            addon_manager_will_install_addon=hooks
+        )
+        fake_aqt.mw = types.SimpleNamespace(
+            addonManager=types.SimpleNamespace(
+                addonMeta=lambda _addon_id: metadata,
+                writeAddonMeta=lambda _addon_id, _metadata: None,
+            )
+        )
+        fake_gui = types.ModuleType(f"{package}.gui")
+        fake_gui.init_gui = lambda: gui_starts.append(True)
+        fake_server = types.ModuleType(f"{package}.server")
+
+        class FakeServerStartupError(RuntimeError):
+            pass
+
+        fake_server.ServerStartupError = FakeServerStartupError
+        fake_server.run_server = lambda: starts.append(True)
+        fake_server.stop_server = lambda: stops.append(True)
+        modules = {
+            "aqt": fake_aqt,
+            f"{package}.gui": fake_gui,
+            f"{package}.server": fake_server,
+        }
+        specification = importlib.util.spec_from_file_location(
+            package,
+            ROOT / "__init__.py",
+            submodule_search_locations=[str(ROOT)],
+        )
+        assert specification is not None and specification.loader is not None
+        installed_module = importlib.util.module_from_spec(specification)
+        modules[package] = installed_module
+
+        try:
+            with patch.dict(sys.modules, modules), patch.dict(
+                os.environ, {"LOCAL_AUDIO_FAST_STANDALONE": "0"}
+            ):
+                specification.loader.exec_module(installed_module)
+                self.assertEqual(len(hooks), 1)
+                hooks[0](object(), "another-addon")
+                self.assertEqual(stops, [])
+                hooks[0](object(), package)
+        finally:
+            for name in modules:
+                sys.modules.pop(name, None)
+
+        self.assertEqual(starts, [True])
+        self.assertEqual(stops, [True])
+        self.assertEqual(gui_starts, [True])
+
     def test_server_global_start_and_stop_are_idempotent(self) -> None:
         created = []
 
