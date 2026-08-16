@@ -25,7 +25,7 @@ class DropInOverlayTests(unittest.TestCase):
     def test_installable_manifest_replaces_the_original_addon_id(self) -> None:
         manifest = json.loads((SOURCE / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["package"], ADDON_ID)
-        self.assertEqual(manifest["min_point_version"], 50)
+        self.assertEqual(manifest["min_point_version"], 65)
 
     def test_replacement_disables_ankiweb_updates_on_first_start(self) -> None:
         writes = []
@@ -39,7 +39,9 @@ class DropInOverlayTests(unittest.TestCase):
                 writes.append((addon_id, metadata.copy()))
 
         fake_aqt = types.ModuleType("aqt")
-        fake_aqt.gui_hooks = types.SimpleNamespace()
+        fake_aqt.gui_hooks = types.SimpleNamespace(
+            addon_manager_will_install_addon=[]
+        )
         fake_aqt.mw = types.SimpleNamespace(addonManager=FakeAddonManager())
         package_name = ADDON_ID
         specification = importlib.util.spec_from_file_location(
