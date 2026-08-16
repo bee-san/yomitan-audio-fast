@@ -8,7 +8,7 @@ import atexit
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .config import ALL_SOURCES, get_server_config
@@ -60,14 +60,48 @@ def startup_failure_message(error: BaseException) -> str:
 
 
 class OptimizedHTTPServer(ThreadingHTTPServer):
-    daemon_threads = True
-    block_on_close = False
+    daemon_threads = False
+    block_on_close = True
     allow_reuse_address = True
     request_queue_size = 128
 
     def __init__(self, address) -> None:
         self.runtime: Optional[ServerRuntime] = None
+        self._connections: set[socket.socket] = set()
+        self._connections_lock = threading.Lock()
         super().__init__(address, LocalAudioHandler)
+
+    def get_request(self):
+        connection, address = super().get_request()
+        self.track_connection(connection)
+        return connection, address
+
+    def shutdown_request(self, request: Any) -> None:
+        try:
+            super().shutdown_request(request)
+        finally:
+            self.forget_connection(request)
+
+    def track_connection(self, connection: socket.socket) -> None:
+        with self._connections_lock:
+            self._connections.add(connection)
+
+    def forget_connection(self, connection: socket.socket) -> None:
+        with self._connections_lock:
+            self._connections.discard(connection)
+
+    def close_connections(self) -> None:
+        with self._connections_lock:
+            connections = tuple(self._connections)
+        for connection in connections:
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                connection.close()
+            except OSError:
+                pass
 
     def handle_error(self, _request, _client_address) -> None:
         return
@@ -669,7 +703,9 @@ class ServerRuntime:
     def stop(self) -> None:
         if self.thread is not None:
             self.server.shutdown()
-            self.thread.join(timeout=5)
+        self.server.close_connections()
+        if self.thread is not None:
+            self.thread.join()
             self.thread = None
         self.server.server_close()
         self.store.close()

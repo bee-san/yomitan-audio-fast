@@ -57,6 +57,42 @@ class FakeSource:
         return self.root
 
 
+class ServerShutdownTests(unittest.TestCase):
+    def test_stop_closes_existing_keep_alive_connections_before_returning(self) -> None:
+        server = server_module.OptimizedHTTPServer(("127.0.0.1", 0))
+        server.runtime = SimpleNamespace(store=SimpleNamespace(), version="test")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_address[1], timeout=1
+        )
+        connection.request("OPTIONS", "/")
+        response = connection.getresponse()
+        response.read()
+        self.assertEqual(response.status, 204)
+        store_closed = []
+        runtime = object.__new__(server_module.ServerRuntime)
+        runtime.server = server
+        runtime.store = SimpleNamespace(close=lambda: store_closed.append(True))
+        runtime.thread = thread
+
+        try:
+            runtime.stop()
+            with self.assertRaises((OSError, http.client.HTTPException)):
+                connection.request("OPTIONS", "/")
+                connection.getresponse()
+        finally:
+            connection.close()
+            if thread.is_alive():
+                server.shutdown()
+                thread.join(5)
+            server.server_close()
+
+        self.assertEqual(store_closed, [True])
+        self.assertEqual(server._connections, set())
+        self.assertFalse(thread.is_alive())
+
+
 class ServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

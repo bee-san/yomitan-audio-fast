@@ -15,9 +15,7 @@ if __name__ != "plugin" and os.environ.get("LOCAL_AUDIO_FAST_STANDALONE") != "1"
         if package == addon_id:
             stop_server()
 
-    install_hook = getattr(gui_hooks, "addon_manager_will_install_addon", None)
-    if install_hook is not None:
-        install_hook.append(stop_before_update)
+    gui_hooks.addon_manager_will_install_addon.append(stop_before_update)
 
     # A local same-ID .ankiaddon install preserves the old AnkiWeb metadata.
     # Disable automatic updates so the original add-on cannot overwrite this
