@@ -39,6 +39,7 @@ class DropInOverlayTests(unittest.TestCase):
                 writes.append((addon_id, metadata.copy()))
 
         fake_aqt = types.ModuleType("aqt")
+        fake_aqt.gui_hooks = types.SimpleNamespace()
         fake_aqt.mw = types.SimpleNamespace(addonManager=FakeAddonManager())
         package_name = ADDON_ID
         specification = importlib.util.spec_from_file_location(
@@ -52,6 +53,7 @@ class DropInOverlayTests(unittest.TestCase):
         fake_gui.init_gui = lambda: None
         fake_server = types.ModuleType(f"{package_name}.server")
         fake_server.run_server = lambda: None
+        fake_server.stop_server = lambda: None
         fake_server.ServerStartupError = type(
             "ServerStartupError", (RuntimeError,), {}
         )
